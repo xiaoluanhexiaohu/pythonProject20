@@ -1,0 +1,45 @@
+{% extends 'core/base.html' %}
+{% block content %}
+<div class="card">
+    <h3>活动分布统计</h3>
+    <table>
+        <tr><th>运动项目</th><th>活动数量</th></tr>
+        {% for item in event_distribution %}
+        <tr>
+            <td>{{ item.sport_event__name }}</td>
+            <td>{{ item.total }}</td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="2">暂无数据</td></tr>
+        {% endfor %}
+    </table>
+</div>
+<div class="card">
+    <h3>校区场地分布</h3>
+    <table>
+        <tr><th>校区</th><th>场地数量</th></tr>
+        {% for item in campus_distribution %}
+        <tr>
+            <td>{{ item.campus__name }}</td>
+            <td>{{ item.total }}</td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="2">暂无数据</td></tr>
+        {% endfor %}
+    </table>
+</div>
+<div class="card">
+    <h3>天气风险统计</h3>
+    <table>
+        <tr><th>风险等级</th><th>数量</th></tr>
+        {% for item in risk_distribution %}
+        <tr>
+            <td>{{ item.weather_risk }}</td>
+            <td>{{ item.total }}</td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="2">暂无数据</td></tr>
+        {% endfor %}
+    </table>
+</div>
+{% endblock %}

@@ -1,0 +1,32 @@
+{% extends 'core/base.html' %}
+{% block title %}系统首页{% endblock %}
+{% block content %}
+<div class="card">
+    <h2>校园运动天气系统升级版</h2>
+    <p>支持天气感知、活动排程、风险预警、智能建议、数据统计和通知管理。</p>
+</div>
+<div class="grid">
+    <div class="card"><h3>{{ campus_count }}</h3><p>校区数量</p></div>
+    <div class="card"><h3>{{ venue_count }}</h3><p>场地数量</p></div>
+    <div class="card"><h3>{{ event_count }}</h3><p>运动项目数</p></div>
+    <div class="card"><h3>{{ meet_count }}</h3><p>活动数</p></div>
+    <div class="card"><h3>{{ schedule_count }}</h3><p>最终排程数</p></div>
+    <div class="card"><h3>{{ alert_count }}</h3><p>有效预警数</p></div>
+</div>
+<div class="card">
+    <h3>最近通知</h3>
+    <table>
+        <tr><th>时间</th><th>标题</th><th>类型</th><th>内容</th></tr>
+        {% for n in latest_notifications %}
+        <tr>
+            <td>{{ n.created_at|date:"Y-m-d H:i" }}</td>
+            <td>{{ n.title }}</td>
+            <td>{{ n.get_notification_type_display }}</td>
+            <td>{{ n.content }}</td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="4">暂无通知</td></tr>
+        {% endfor %}
+    </table>
+</div>
+{% endblock %}

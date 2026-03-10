@@ -1,0 +1,25 @@
+{% extends 'core/base.html' %}
+{% block content %}
+<div class="toolbar">
+    <a class="btn" href="/suggestions/generate/">重新生成智能建议</a>
+</div>
+<div class="card">
+    <h3>智能运动建议</h3>
+    <table>
+        <tr><th>校区</th><th>项目</th><th>日期</th><th>时间</th><th>评分</th><th>天气</th><th>原因</th></tr>
+        {% for item in items %}
+        <tr>
+            <td>{{ item.campus.name }}</td>
+            <td>{{ item.sport_event.name }}</td>
+            <td>{{ item.suggest_date }}</td>
+            <td>{{ item.suggest_time }}</td>
+            <td>{{ item.score }}</td>
+            <td>{{ item.weather_summary }}</td>
+            <td>{{ item.reason }}</td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="7">暂无建议，请先拉取天气并生成建议</td></tr>
+        {% endfor %}
+    </table>
+</div>
+{% endblock %}

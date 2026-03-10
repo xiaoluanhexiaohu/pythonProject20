@@ -1,0 +1,20 @@
+{% extends 'core/base.html' %}
+{% block content %}
+<div class="card">
+    <h3>天气预警中心</h3>
+    <table>
+        <tr><th>校区</th><th>标题</th><th>级别</th><th>时间</th><th>内容</th></tr>
+        {% for item in items %}
+        <tr>
+            <td>{{ item.campus.name }}</td>
+            <td>{{ item.title }}</td>
+            <td>{{ item.get_level_display }}</td>
+            <td>{{ item.alert_time|date:"Y-m-d H:i" }}</td>
+            <td>{{ item.message }}</td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="5">暂无有效预警</td></tr>
+        {% endfor %}
+    </table>
+</div>
+{% endblock %}

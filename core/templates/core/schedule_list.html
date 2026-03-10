@@ -1,0 +1,33 @@
+{% extends 'core/base.html' %}
+{% block content %}
+<div class="toolbar">
+    <a class="btn" href="/schedules/export/">导出 CSV</a>
+</div>
+<div class="card">
+    <h3>最终排程列表</h3>
+    <table>
+        <tr><th>活动</th><th>校区</th><th>场地</th><th>日期</th><th>时间</th><th>风险</th><th>说明</th></tr>
+        {% for item in items %}
+        <tr>
+            <td>{{ item.meet.title }}</td>
+            <td>{{ item.campus.name }}</td>
+            <td>{% if item.venue %}{{ item.venue.name }}{% else %}未分配{% endif %}</td>
+            <td>{{ item.scheduled_date }}</td>
+            <td>{{ item.scheduled_start_time }} - {{ item.scheduled_end_time }}</td>
+            <td>
+                {% if item.weather_risk == '低' %}
+                    <span class="tag low">低风险</span>
+                {% elif item.weather_risk == '中' %}
+                    <span class="tag mid">中风险</span>
+                {% else %}
+                    <span class="tag high">高风险</span>
+                {% endif %}
+            </td>
+            <td>{{ item.notes }}</td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="7">暂无最终排程</td></tr>
+        {% endfor %}
+    </table>
+</div>
+{% endblock %}

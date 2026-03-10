@@ -1,0 +1,25 @@
+{% extends 'core/base.html' %}
+{% block content %}
+<div class="toolbar"><a class="btn" href="/meets/create/">新增活动</a></div>
+<div class="card">
+    <h3>活动列表</h3>
+    <table>
+        <tr><th>名称</th><th>校区</th><th>场地</th><th>项目</th><th>日期</th><th>时间</th><th>人数</th><th>状态</th><th>操作</th></tr>
+        {% for item in items %}
+        <tr>
+            <td>{{ item.title }}</td>
+            <td>{{ item.campus.name }}</td>
+            <td>{% if item.venue %}{{ item.venue.name }}{% else %}未指定{% endif %}</td>
+            <td>{{ item.sport_event.name }}</td>
+            <td>{{ item.planned_date }}</td>
+            <td>{{ item.planned_start_time }} - {{ item.planned_end_time }}</td>
+            <td>{{ item.expected_people }}</td>
+            <td>{{ item.get_status_display }}</td>
+            <td><a class="btn green" href="/schedules/generate/{{ item.id }}/">生成排程</a></td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="9">暂无数据</td></tr>
+        {% endfor %}
+    </table>
+</div>
+{% endblock %}

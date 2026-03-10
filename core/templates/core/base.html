@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}校园运动天气系统{% endblock %}</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 0; background: #f6f8fb; color: #222; }
+        .nav { background: #173b6c; padding: 14px 24px; display: flex; gap: 14px; flex-wrap: wrap; }
+        .nav a { color: #fff; text-decoration: none; font-size: 14px; }
+        .container { width: 92%; max-width: 1200px; margin: 24px auto; }
+        .card { background: #fff; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,.06); padding: 18px; margin-bottom: 18px; }
+        .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 16px; }
+        table { width: 100%; border-collapse: collapse; background: #fff; }
+        th, td { border: 1px solid #e8ebf0; padding: 10px; font-size: 14px; text-align: left; }
+        th { background: #f3f6fa; }
+        .btn { display: inline-block; background: #1f73f1; color: #fff; text-decoration: none; padding: 8px 14px; border-radius: 8px; border: none; cursor: pointer; }
+        .btn.gray { background: #6c757d; }
+        .btn.green { background: #28a745; }
+        .btn.orange { background: #f59f00; }
+        .toolbar { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 16px; }
+        input, select, textarea { width: 100%; padding: 10px; border: 1px solid #cfd6df; border-radius: 8px; box-sizing: border-box; }
+        label { font-size: 14px; font-weight: bold; display: block; margin-bottom: 6px; }
+        .form-group { margin-bottom: 14px; }
+        .msg { padding: 12px; background: #e9f7ef; border-left: 4px solid #28a745; border-radius: 6px; margin-bottom: 14px; }
+        .tag { padding: 4px 10px; border-radius: 999px; font-size: 12px; display: inline-block; }
+        .tag.low { background: #e6f7ee; color: #1d7f48; }
+        .tag.mid { background: #fff3cd; color: #946200; }
+        .tag.high { background: #fde2e1; color: #b42318; }
+    </style>
+</head>
+<body>
+    <div class="nav">
+        <a href="/">首页</a>
+        <a href="/campuses/">校区管理</a>
+        <a href="/venues/">场地管理</a>
+        <a href="/events/">运动项目</a>
+        <a href="/meets/">活动管理</a>
+        <a href="/weather/">天气中心</a>
+        <a href="/alerts/">预警中心</a>
+        <a href="/suggestions/">智能建议</a>
+        <a href="/schedules/">最终排程</a>
+        <a href="/analytics/">统计分析</a>
+        <a href="/notifications/">系统通知</a>
+    </div>
+    <div class="container">
+        {% if messages %}
+            {% for message in messages %}
+                <div class="msg">{{ message }}</div>
+            {% endfor %}
+        {% endif %}
+        {% block content %}{% endblock %}
+    </div>
+</body>
+</html>

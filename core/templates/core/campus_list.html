@@ -1,0 +1,21 @@
+{% extends 'core/base.html' %}
+{% block content %}
+<div class="toolbar"><a class="btn" href="/campuses/create/">新增校区</a></div>
+<div class="card">
+    <h3>校区列表</h3>
+    <table>
+        <tr><th>ID</th><th>名称</th><th>位置</th><th>经纬度</th><th>描述</th></tr>
+        {% for item in items %}
+        <tr>
+            <td>{{ item.id }}</td>
+            <td>{{ item.name }}</td>
+            <td>{{ item.location }}</td>
+            <td>{{ item.latitude }}, {{ item.longitude }}</td>
+            <td>{{ item.description }}</td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="5">暂无数据</td></tr>
+        {% endfor %}
+    </table>
+</div>
+{% endblock %}

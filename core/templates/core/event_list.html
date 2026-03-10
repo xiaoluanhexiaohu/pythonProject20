@@ -1,0 +1,22 @@
+{% extends 'core/base.html' %}
+{% block content %}
+<div class="toolbar"><a class="btn" href="/events/create/">新增项目</a></div>
+<div class="card">
+    <h3>运动项目列表</h3>
+    <table>
+        <tr><th>项目</th><th>温度范围</th><th>避雨</th><th>最大风速</th><th>强度</th><th>热量/小时</th></tr>
+        {% for item in items %}
+        <tr>
+            <td>{{ item.name }}</td>
+            <td>{{ item.suitable_temp_min }}℃ ~ {{ item.suitable_temp_max }}℃</td>
+            <td>{% if item.avoid_rain %}是{% else %}否{% endif %}</td>
+            <td>{{ item.avoid_wind_level }}</td>
+            <td>{{ item.get_intensity_display }}</td>
+            <td>{{ item.calories_per_hour }}</td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="6">暂无数据</td></tr>
+        {% endfor %}
+    </table>
+</div>
+{% endblock %}

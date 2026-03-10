@@ -1,0 +1,23 @@
+{% extends 'core/base.html' %}
+{% block content %}
+<div class="toolbar"><a class="btn" href="/venues/create/">新增场地</a></div>
+<div class="card">
+    <h3>场地列表</h3>
+    <table>
+        <tr><th>校区</th><th>名称</th><th>类型</th><th>容量</th><th>状态</th><th>室内</th><th>照明</th></tr>
+        {% for item in items %}
+        <tr>
+            <td>{{ item.campus.name }}</td>
+            <td>{{ item.name }}</td>
+            <td>{{ item.venue_type }}</td>
+            <td>{{ item.capacity }}</td>
+            <td>{{ item.get_status_display }}</td>
+            <td>{% if item.indoor %}是{% else %}否{% endif %}</td>
+            <td>{% if item.has_lighting %}是{% else %}否{% endif %}</td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="7">暂无数据</td></tr>
+        {% endfor %}
+    </table>
+</div>
+{% endblock %}
