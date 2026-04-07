@@ -2,8 +2,9 @@ import csv
 
 from django.contrib import messages
 from django.db.models import Count
-from django.http import HttpResponse
+from django.http import HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
+from django.views.decorators.http import require_GET
 
 from .forms import CampusForm, VenueForm, SportEventForm, MeetForm
 from .models import (
@@ -120,10 +121,33 @@ def weather_center(request):
     }
     return render(request, "core/weather_center.html", context)
 
+
 def refresh_weather(request):
     count = WeatherService.refresh_all_campus_weather()
     messages.success(request, f"天气更新成功，已同步 {count} 个校区")
     return redirect("weather_center")
+
+
+@require_GET
+def api_refresh_weather_v1(request, campus_id):
+    """V1：QWeather（和风天气）"""
+    try:
+        campus = get_object_or_404(Campus, id=campus_id)
+        result = WeatherService.fetch_and_store_for_campus_with_provider(campus, provider="qweather")
+        return JsonResponse({"ok": True, "version": "v1", "provider": "qweather", "data": result})
+    except Exception as exc:
+        return JsonResponse({"ok": False, "version": "v1", "provider": "qweather", "error": str(exc)}, status=400)
+
+
+@require_GET
+def api_refresh_weather_v2(request, campus_id):
+    """V2：高德天气"""
+    try:
+        campus = get_object_or_404(Campus, id=campus_id)
+        result = WeatherService.fetch_and_store_for_campus_with_provider(campus, provider="amap")
+        return JsonResponse({"ok": True, "version": "v2", "provider": "amap", "data": result})
+    except Exception as exc:
+        return JsonResponse({"ok": False, "version": "v2", "provider": "amap", "error": str(exc)}, status=400)
 
 
 def alert_center(request):
