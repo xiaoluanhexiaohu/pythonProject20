@@ -20,6 +20,9 @@ urlpatterns = [
     path("weather/refresh/", views.refresh_weather, name="refresh_weather"),
     path("alerts/", views.alert_center, name="alert_center"),
 
+    path("api/v1/weather/refresh/<int:campus_id>/", views.api_refresh_weather_v1, name="api_refresh_weather_v1"),
+    path("api/v2/weather/refresh/<int:campus_id>/", views.api_refresh_weather_v2, name="api_refresh_weather_v2"),
+
     path("suggestions/", views.suggestion_list, name="suggestion_list"),
     path("suggestions/generate/", views.generate_suggestions, name="generate_suggestions"),
 

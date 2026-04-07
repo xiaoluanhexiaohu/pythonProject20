@@ -69,3 +69,7 @@ DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 OPENMETEO_BASE_URL = "https://api.open-meteo.com/v1/forecast"
 DEFAULT_LATITUDE = 31.2304
 DEFAULT_LONGITUDE = 121.4737
+QWEATHER_BASE_URL = "https://devapi.qweather.com"
+QWEATHER_API_KEY = ""
+AMAP_BASE_URL = "https://restapi.amap.com"
+AMAP_API_KEY = ""
