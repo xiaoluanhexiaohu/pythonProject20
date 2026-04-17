@@ -1,14 +1,44 @@
 from datetime import date, time, timedelta
 
+from django.contrib.auth import get_user_model
 from django.core.management.base import BaseCommand
 
-from core.models import Campus, Venue, SportEvent, Meet, Notification
+from core.models import Campus, Venue, SportEvent, Meet, Notification, UserProfile
 
 
 class Command(BaseCommand):
     help = "初始化演示数据"
 
     def handle(self, *args, **options):
+        user_model = get_user_model()
+
+        admin_user, _ = user_model.objects.get_or_create(
+            username="admin_demo",
+            defaults={"is_staff": True, "is_superuser": True},
+        )
+        if not admin_user.check_password("admin123456"):
+            admin_user.set_password("admin123456")
+            admin_user.save(update_fields=["password"])
+        UserProfile.objects.update_or_create(
+            user=admin_user, defaults={"role": UserProfile.ROLE_ADMIN, "display_name": "系统管理员"}
+        )
+
+        teacher_user, _ = user_model.objects.get_or_create(username="teacher_demo")
+        if not teacher_user.check_password("teacher123456"):
+            teacher_user.set_password("teacher123456")
+            teacher_user.save(update_fields=["password"])
+        UserProfile.objects.update_or_create(
+            user=teacher_user, defaults={"role": UserProfile.ROLE_TEACHER, "display_name": "演示教师"}
+        )
+
+        student_user, _ = user_model.objects.get_or_create(username="student_demo")
+        if not student_user.check_password("student123456"):
+            student_user.set_password("student123456")
+            student_user.save(update_fields=["password"])
+        UserProfile.objects.update_or_create(
+            user=student_user, defaults={"role": UserProfile.ROLE_STUDENT, "display_name": "演示学生"}
+        )
+
         main_campus, _ = Campus.objects.get_or_create(
             name="主校区",
             defaults={

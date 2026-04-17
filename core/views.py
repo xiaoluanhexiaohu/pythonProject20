@@ -1,12 +1,16 @@
 import csv
 
 from django.contrib import messages
+from django.contrib.auth import login, logout
+from django.contrib.auth.decorators import login_required
+from django.contrib.auth.forms import AuthenticationForm
 from django.db.models import Count
 from django.http import HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.views.decorators.http import require_GET
 
 from .forms import CampusForm, VenueForm, SportEventForm, MeetForm
+from .permissions import ROLE_ADMIN, ROLE_TEACHER, get_user_role, role_required
 from .models import (
     Campus,
     Venue,
@@ -17,11 +21,31 @@ from .models import (
     Suggestion,
     FinalSchedule,
     Notification,
+    OperationLog,
 )
 from .services import WeatherService
 from .utils import calculate_sport_score, risk_level, weather_text
 
 
+def login_view(request):
+    if request.user.is_authenticated:
+        return redirect("dashboard")
+    form = AuthenticationForm(request, data=request.POST or None)
+    if request.method == "POST" and form.is_valid():
+        login(request, form.get_user())
+        messages.success(request, "登录成功")
+        return redirect("dashboard")
+    return render(request, "core/login.html", {"form": form})
+
+
+@login_required
+def logout_view(request):
+    logout(request)
+    messages.success(request, "您已退出登录")
+    return redirect("login")
+
+
+@login_required
 def dashboard(request):
     context = {
         "campus_count": Campus.objects.count(),
@@ -31,14 +55,17 @@ def dashboard(request):
         "schedule_count": FinalSchedule.objects.count(),
         "alert_count": WeatherAlert.objects.filter(active=True).count(),
         "latest_notifications": Notification.objects.all()[:6],
+        "current_role": get_user_role(request.user),
     }
     return render(request, "core/dashboard.html", context)
 
 
+@login_required
 def campus_list(request):
     return render(request, "core/campus_list.html", {"items": Campus.objects.all()})
 
 
+@role_required(ROLE_ADMIN)
 def campus_create(request):
     form = CampusForm(request.POST or None)
     if form.is_valid():
@@ -48,11 +75,13 @@ def campus_create(request):
     return render(request, "core/campus_form.html", {"form": form, "title": "新增校区"})
 
 
+@login_required
 def venue_list(request):
     items = Venue.objects.select_related("campus").all()
     return render(request, "core/venue_list.html", {"items": items})
 
 
+@role_required(ROLE_ADMIN)
 def venue_create(request):
     form = VenueForm(request.POST or None)
     if form.is_valid():
@@ -62,10 +91,12 @@ def venue_create(request):
     return render(request, "core/venue_form.html", {"form": form, "title": "新增场地"})
 
 
+@login_required
 def event_list(request):
     return render(request, "core/event_list.html", {"items": SportEvent.objects.all()})
 
 
+@role_required(ROLE_ADMIN, ROLE_TEACHER)
 def event_create(request):
     form = SportEventForm(request.POST or None)
     if form.is_valid():
@@ -75,11 +106,13 @@ def event_create(request):
     return render(request, "core/event_form.html", {"form": form, "title": "新增运动项目"})
 
 
+@login_required
 def meet_list(request):
     items = Meet.objects.select_related("campus", "venue", "sport_event").all()
     return render(request, "core/meet_list.html", {"items": items})
 
 
+@role_required(ROLE_ADMIN, ROLE_TEACHER)
 def meet_create(request):
     form = MeetForm(request.POST or None)
     if form.is_valid():
@@ -89,6 +122,7 @@ def meet_create(request):
     return render(request, "core/meet_form.html", {"form": form, "title": "新增活动"})
 
 
+@login_required
 def weather_center(request):
     campus_id = request.GET.get("campus")
     campuses = Campus.objects.all()
@@ -122,6 +156,7 @@ def weather_center(request):
     return render(request, "core/weather_center.html", context)
 
 
+@role_required(ROLE_ADMIN, ROLE_TEACHER)
 def refresh_weather(request):
     count = WeatherService.refresh_all_campus_weather()
     messages.success(request, f"天气更新成功，已同步 {count} 个校区")
@@ -129,6 +164,7 @@ def refresh_weather(request):
 
 
 @require_GET
+@role_required(ROLE_ADMIN, ROLE_TEACHER)
 def api_refresh_weather_v1(request, campus_id):
     """V1：QWeather（和风天气）"""
     try:
@@ -140,6 +176,7 @@ def api_refresh_weather_v1(request, campus_id):
 
 
 @require_GET
+@role_required(ROLE_ADMIN, ROLE_TEACHER)
 def api_refresh_weather_v2(request, campus_id):
     """V2：高德天气"""
     try:
@@ -150,11 +187,13 @@ def api_refresh_weather_v2(request, campus_id):
         return JsonResponse({"ok": False, "version": "v2", "provider": "amap", "error": str(exc)}, status=400)
 
 
+@login_required
 def alert_center(request):
     items = WeatherAlert.objects.select_related("campus").filter(active=True)
     return render(request, "core/alert_center.html", {"items": items})
 
 
+@role_required(ROLE_ADMIN, ROLE_TEACHER)
 def generate_suggestions(request):
     Suggestion.objects.all().delete()
     campuses = Campus.objects.all()
@@ -187,11 +226,13 @@ def generate_suggestions(request):
     return redirect("suggestion_list")
 
 
+@login_required
 def suggestion_list(request):
     items = Suggestion.objects.select_related("campus", "sport_event").all()[:200]
     return render(request, "core/suggestion_list.html", {"items": items})
 
 
+@role_required(ROLE_ADMIN, ROLE_TEACHER)
 def generate_schedule(request, meet_id):
     meet = get_object_or_404(Meet, id=meet_id)
 
@@ -243,11 +284,13 @@ def generate_schedule(request, meet_id):
     return redirect("schedule_list")
 
 
+@login_required
 def schedule_list(request):
     items = FinalSchedule.objects.select_related("meet", "campus", "venue").all()
     return render(request, "core/schedule_list.html", {"items": items})
 
 
+@role_required(ROLE_ADMIN, ROLE_TEACHER)
 def export_schedule_csv(request):
     response = HttpResponse(content_type="text/csv; charset=utf-8")
     response["Content-Disposition"] = 'attachment; filename="final_schedule.csv"'
@@ -271,6 +314,7 @@ def export_schedule_csv(request):
     return response
 
 
+@login_required
 def analytics(request):
     event_distribution = Meet.objects.values("sport_event__name").annotate(total=Count("id")).order_by("-total")
     campus_distribution = Venue.objects.values("campus__name").annotate(total=Count("id")).order_by("-total")
@@ -284,6 +328,13 @@ def analytics(request):
     return render(request, "core/analytics.html", context)
 
 
+@login_required
 def notification_list(request):
     items = Notification.objects.all()[:100]
     return render(request, "core/notification_list.html", {"items": items})
+
+
+@role_required(ROLE_ADMIN)
+def operation_log_list(request):
+    items = OperationLog.objects.select_related("user").all()[:300]
+    return render(request, "core/operation_log_list.html", {"items": items})

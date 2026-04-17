@@ -1,6 +1,8 @@
 {% extends 'core/base.html' %}
 {% block content %}
+{% if request.user.profile.role == "admin" or request.user.profile.role == "teacher" or request.user.is_superuser %}
 <div class="toolbar"><a class="btn" href="/events/create/">新增项目</a></div>
+{% endif %}
 <div class="card">
     <h3>运动项目列表</h3>
     <table>

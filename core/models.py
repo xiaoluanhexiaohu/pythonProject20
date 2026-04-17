@@ -1,5 +1,8 @@
 from django.db import models
 from django.utils import timezone
+from django.contrib.auth import get_user_model
+from django.db.models.signals import post_save
+from django.dispatch import receiver
 
 
 class TimeStampedModel(models.Model):
@@ -268,3 +271,65 @@ class Notification(TimeStampedModel):
 
     def __str__(self):
         return self.title
+
+
+class UserProfile(TimeStampedModel):
+    ROLE_ADMIN = "admin"
+    ROLE_TEACHER = "teacher"
+    ROLE_STUDENT = "student"
+    ROLE_CHOICES = [
+        (ROLE_ADMIN, "管理员"),
+        (ROLE_TEACHER, "教师"),
+        (ROLE_STUDENT, "学生"),
+    ]
+
+    user = models.OneToOneField(
+        get_user_model(),
+        on_delete=models.CASCADE,
+        related_name="profile",
+        verbose_name="用户",
+    )
+    role = models.CharField(max_length=20, choices=ROLE_CHOICES, default=ROLE_STUDENT, verbose_name="角色")
+    display_name = models.CharField(max_length=100, blank=True, verbose_name="显示名称")
+
+    class Meta:
+        verbose_name = "用户角色"
+        verbose_name_plural = "用户角色"
+
+    def __str__(self):
+        return f"{self.user.username}({self.get_role_display()})"
+
+
+class OperationLog(TimeStampedModel):
+    user = models.ForeignKey(
+        get_user_model(),
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="operation_logs",
+        verbose_name="操作用户",
+    )
+    role = models.CharField(max_length=20, blank=True, verbose_name="角色")
+    action = models.CharField(max_length=120, blank=True, verbose_name="操作名称")
+    method = models.CharField(max_length=10, verbose_name="请求方法")
+    path = models.CharField(max_length=255, verbose_name="请求路径")
+    status_code = models.PositiveIntegerField(default=200, verbose_name="状态码")
+    ip_address = models.CharField(max_length=64, blank=True, verbose_name="IP地址")
+    detail = models.TextField(blank=True, verbose_name="详情")
+
+    class Meta:
+        verbose_name = "操作日志"
+        verbose_name_plural = "操作日志"
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        actor = self.user.username if self.user else "匿名用户"
+        return f"{actor} {self.method} {self.path}"
+
+
+@receiver(post_save, sender=get_user_model())
+def ensure_user_profile(sender, instance, created, **kwargs):
+    if created:
+        UserProfile.objects.create(user=instance, display_name=instance.get_full_name() or instance.username)
+    elif not hasattr(instance, "profile"):
+        UserProfile.objects.create(user=instance, display_name=instance.get_full_name() or instance.username)
