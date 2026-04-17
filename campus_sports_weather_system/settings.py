@@ -24,6 +24,7 @@ MIDDLEWARE = [
     "django.contrib.auth.middleware.AuthenticationMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
+    "core.middleware.OperationLogMiddleware",
 ]
 
 ROOT_URLCONF = "campus_sports_weather_system.urls"
@@ -65,6 +66,9 @@ STATICFILES_DIRS = []
 STATIC_ROOT = BASE_DIR / "staticfiles"
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
+LOGIN_URL = "login"
+LOGIN_REDIRECT_URL = "dashboard"
+LOGOUT_REDIRECT_URL = "login"
 
 OPENMETEO_BASE_URL = "https://api.open-meteo.com/v1/forecast"
 DEFAULT_LATITUDE = 31.2304

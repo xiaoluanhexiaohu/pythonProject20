@@ -31,19 +31,35 @@
 </head>
 <body>
     <div class="nav">
-        <a href="/">首页</a>
-        <a href="/campuses/">校区管理</a>
-        <a href="/venues/">场地管理</a>
-        <a href="/events/">运动项目</a>
-        <a href="/meets/">活动管理</a>
-        <a href="/weather/">天气中心</a>
-        <a href="/alerts/">预警中心</a>
-        <a href="/suggestions/">智能建议</a>
-        <a href="/schedules/">最终排程</a>
-        <a href="/analytics/">统计分析</a>
-        <a href="/notifications/">系统通知</a>
+        {% if request.user.is_authenticated %}
+            <a href="/">首页</a>
+            <a href="/campuses/">校区管理</a>
+            <a href="/venues/">场地管理</a>
+            <a href="/events/">运动项目</a>
+            <a href="/meets/">活动管理</a>
+            <a href="/weather/">天气中心</a>
+            <a href="/alerts/">预警中心</a>
+            <a href="/suggestions/">智能建议</a>
+            <a href="/schedules/">最终排程</a>
+            <a href="/analytics/">统计分析</a>
+            <a href="/notifications/">系统通知</a>
+            {% if request.user.profile.role == "admin" or request.user.is_superuser %}
+                <a href="/operation-logs/">操作日志</a>
+            {% endif %}
+            <a href="/logout/">退出登录</a>
+        {% else %}
+            <a href="/login/">登录</a>
+        {% endif %}
     </div>
     <div class="container">
+        {% if request.user.is_authenticated %}
+            <div class="card" style="padding:12px 16px;">
+                当前用户：<strong>{{ request.user.username }}</strong>
+                {% if request.user.profile %}
+                    ｜角色：<strong>{{ request.user.profile.get_role_display }}</strong>
+                {% endif %}
+            </div>
+        {% endif %}
         {% if messages %}
             {% for message in messages %}
                 <div class="msg">{{ message }}</div>

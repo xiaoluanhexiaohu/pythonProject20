@@ -1,6 +1,8 @@
 {% extends 'core/base.html' %}
 {% block content %}
+{% if request.user.profile.role == "admin" or request.user.profile.role == "teacher" or request.user.is_superuser %}
 <div class="toolbar"><a class="btn" href="/meets/create/">新增活动</a></div>
+{% endif %}
 <div class="card">
     <h3>活动列表</h3>
     <table>
@@ -15,7 +17,13 @@
             <td>{{ item.planned_start_time }} - {{ item.planned_end_time }}</td>
             <td>{{ item.expected_people }}</td>
             <td>{{ item.get_status_display }}</td>
-            <td><a class="btn green" href="/schedules/generate/{{ item.id }}/">生成排程</a></td>
+            <td>
+                {% if request.user.profile.role == "admin" or request.user.profile.role == "teacher" or request.user.is_superuser %}
+                    <a class="btn green" href="/schedules/generate/{{ item.id }}/">生成排程</a>
+                {% else %}
+                    -
+                {% endif %}
+            </td>
         </tr>
         {% empty %}
         <tr><td colspan="9">暂无数据</td></tr>

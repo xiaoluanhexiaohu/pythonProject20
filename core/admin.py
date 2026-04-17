@@ -9,6 +9,8 @@ from .models import (
     Suggestion,
     FinalSchedule,
     Notification,
+    UserProfile,
+    OperationLog,
 )
 
 admin.site.register(Campus)
@@ -20,3 +22,5 @@ admin.site.register(WeatherAlert)
 admin.site.register(Suggestion)
 admin.site.register(FinalSchedule)
 admin.site.register(Notification)
+admin.site.register(UserProfile)
+admin.site.register(OperationLog)
