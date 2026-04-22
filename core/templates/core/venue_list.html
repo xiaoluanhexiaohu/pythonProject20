@@ -1,6 +1,8 @@
 {% extends 'core/base.html' %}
 {% block content %}
+{% if current_role == "admin" %}
 <div class="toolbar"><a class="btn" href="/venues/create/">新增场地</a></div>
+{% endif %}
 <div class="card">
     <h3>场地列表</h3>
     <table>

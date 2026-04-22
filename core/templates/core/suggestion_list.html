@@ -1,7 +1,9 @@
 {% extends 'core/base.html' %}
 {% block content %}
 <div class="toolbar">
+    {% if current_role == "admin" or current_role == "teacher" %}
     <a class="btn" href="/suggestions/generate/">重新生成智能建议</a>
+    {% endif %}
 </div>
 <div class="card">
     <h3>智能运动建议</h3>

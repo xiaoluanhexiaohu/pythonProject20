@@ -1,7 +1,9 @@
 {% extends 'core/base.html' %}
 {% block content %}
 <div class="toolbar">
-    <a class="btn" href="/schedules/export/">导出 CSV</a>
+    {% if current_role == "admin" or current_role == "teacher" %}
+        <a class="btn" href="/schedules/export/">导出 CSV</a>
+    {% endif %}
 </div>
 <div class="card">
     <h3>最终排程列表</h3>

@@ -1,0 +1,37 @@
+{% extends "core/base.html" %}
+{% block title %}操作日志{% endblock %}
+{% block content %}
+<div class="card">
+    <h2>操作日志（最近300条）</h2>
+    <table>
+        <thead>
+        <tr>
+            <th>时间</th>
+            <th>用户</th>
+            <th>角色</th>
+            <th>操作</th>
+            <th>方法</th>
+            <th>路径</th>
+            <th>状态码</th>
+            <th>IP</th>
+        </tr>
+        </thead>
+        <tbody>
+        {% for item in items %}
+            <tr>
+                <td>{{ item.created_at|date:"Y-m-d H:i:s" }}</td>
+                <td>{% if item.user %}{{ item.user.username }}{% else %}匿名{% endif %}</td>
+                <td>{{ item.role|default:"-" }}</td>
+                <td>{{ item.action|default:"-" }}</td>
+                <td>{{ item.method }}</td>
+                <td>{{ item.path }}</td>
+                <td>{{ item.status_code }}</td>
+                <td>{{ item.ip_address|default:"-" }}</td>
+            </tr>
+        {% empty %}
+            <tr><td colspan="8">暂无日志</td></tr>
+        {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endblock %}

@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>登录 - 校园运动天气系统</title>
+    <style>
+        body { font-family: Arial, sans-serif; background: #f4f6fa; }
+        .wrap { max-width: 420px; margin: 90px auto; background: #fff; border-radius: 12px; padding: 24px; box-shadow: 0 4px 12px rgba(0,0,0,.08); }
+        h2 { margin-top: 0; }
+        .form-group { margin-bottom: 14px; }
+        input { width: 100%; padding: 10px; border: 1px solid #cfd6df; border-radius: 8px; box-sizing: border-box; }
+        button { width: 100%; border: none; background: #1f73f1; color: #fff; padding: 10px; border-radius: 8px; cursor: pointer; }
+        .errorlist { color: #c1121f; margin: 0 0 8px 0; padding-left: 20px; }
+    </style>
+</head>
+<body>
+<div class="wrap">
+    <h2>系统登录</h2>
+    <p>请使用账号登录后访问系统。</p>
+    <form method="post">
+        {% csrf_token %}
+        <div class="form-group">
+            <label for="id_username">用户名</label>
+            {{ form.username }}
+        </div>
+        <div class="form-group">
+            <label for="id_password">密码</label>
+            {{ form.password }}
+        </div>
+        {{ form.non_field_errors }}
+        <button type="submit">登录</button>
+    </form>
+</div>
+</body>
+</html>

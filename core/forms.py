@@ -1,5 +1,7 @@
 from django import forms
-from .models import Campus, Venue, SportEvent, Meet
+from django.contrib.auth import get_user_model
+
+from .models import Campus, Venue, SportEvent, Meet, UserProfile
 
 
 class CampusForm(forms.ModelForm):
@@ -51,3 +53,11 @@ class MeetForm(forms.ModelForm):
             "planned_start_time": forms.TimeInput(attrs={"type": "time"}),
             "planned_end_time": forms.TimeInput(attrs={"type": "time"}),
         }
+
+
+class UserRoleForm(forms.Form):
+    user = forms.ModelChoiceField(
+        queryset=get_user_model().objects.all().order_by("username"),
+        label="用户",
+    )
+    role = forms.ChoiceField(choices=UserProfile.ROLE_CHOICES, label="角色")

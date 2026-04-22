@@ -1,0 +1,36 @@
+{% extends "core/base.html" %}
+{% block title %}用户权限管理{% endblock %}
+{% block content %}
+<div class="card">
+    <h3>用户角色设置</h3>
+    <form method="post" style="max-width: 480px;">
+        {% csrf_token %}
+        <div class="form-group">
+            <label>{{ form.user.label }}</label>
+            {{ form.user }}
+        </div>
+        <div class="form-group">
+            <label>{{ form.role.label }}</label>
+            {{ form.role }}
+        </div>
+        <button class="btn" type="submit">保存角色</button>
+    </form>
+</div>
+
+<div class="card">
+    <h3>当前用户角色</h3>
+    <table>
+        <tr><th>用户名</th><th>显示名</th><th>角色</th><th>创建时间</th></tr>
+        {% for item in items %}
+            <tr>
+                <td>{{ item.user.username }}</td>
+                <td>{{ item.display_name|default:item.user.username }}</td>
+                <td>{{ item.get_role_display }}</td>
+                <td>{{ item.created_at|date:"Y-m-d H:i" }}</td>
+            </tr>
+        {% empty %}
+            <tr><td colspan="4">暂无用户角色数据</td></tr>
+        {% endfor %}
+    </table>
+</div>
+{% endblock %}

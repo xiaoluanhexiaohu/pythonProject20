@@ -3,7 +3,9 @@
 <div class="card">
     <h3>天气中心</h3>
     <div class="toolbar">
-        <a class="btn" href="/weather/refresh/">刷新全部校区天气</a>
+        {% if current_role == "admin" or current_role == "teacher" %}
+            <a class="btn" href="/weather/refresh/">刷新全部校区天气</a>
+        {% endif %}
         <form method="get" style="display:flex; gap:10px; align-items:center;">
             <select name="campus">
                 {% for c in campuses %}
