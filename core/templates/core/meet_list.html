@@ -19,7 +19,11 @@
             <td>{{ item.get_status_display }}</td>
             <td>
                 {% if request.user.profile.role == "admin" or request.user.profile.role == "teacher" or request.user.is_superuser %}
-                    <a class="btn green" href="/schedules/generate/{{ item.id }}/">生成排程</a>
+                    {% if item.status == "pending" %}
+                        <a class="btn green" href="/schedules/generate/{{ item.id }}/">智能排期</a>
+                    {% else %}
+                        -
+                    {% endif %}
                 {% else %}
                     -
                 {% endif %}

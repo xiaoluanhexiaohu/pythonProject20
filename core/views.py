@@ -1,4 +1,5 @@
 import csv
+from datetime import datetime, timedelta
 
 from django.contrib import messages
 from django.contrib.auth import login, logout
@@ -7,6 +8,7 @@ from django.contrib.auth.forms import AuthenticationForm
 from django.db.models import Count
 from django.http import HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
+from django.utils import timezone
 from django.views.decorators.http import require_GET
 
 from .forms import CampusForm, VenueForm, SportEventForm, MeetForm
@@ -25,6 +27,89 @@ from .models import (
 )
 from .services import WeatherService
 from .utils import calculate_sport_score, risk_level, weather_text
+
+
+def get_activity_duration(meet):
+    start_dt = datetime.combine(meet.planned_date, meet.planned_start_time)
+    end_dt = datetime.combine(meet.planned_date, meet.planned_end_time)
+    duration = end_dt - start_dt
+    if duration <= timedelta(0):
+        return timedelta(hours=1)
+    return duration
+
+
+def time_overlap(start1, end1, start2, end2):
+    return start1 < end2 and end1 > start2
+
+
+def venue_has_conflict(venue, scheduled_date, start_time, end_time, meet=None):
+    schedules = FinalSchedule.objects.filter(venue=venue, scheduled_date=scheduled_date)
+    if meet:
+        schedules = schedules.exclude(meet=meet)
+
+    for schedule in schedules:
+        if time_overlap(schedule.scheduled_start_time, schedule.scheduled_end_time, start_time, end_time):
+            return True
+    return False
+
+
+def choose_best_weather_slot(meet):
+    now = timezone.now()
+    records = list(
+        WeatherRecord.objects.filter(campus=meet.campus, forecast_time__gte=now)
+        .order_by("forecast_time")[:72]
+    )
+    if not records:
+        return None, 0, "未知", "未来72小时缺少天气数据，已回退到活动原计划时间。"
+
+    candidates = []
+    for record in records:
+        score = calculate_sport_score(record, meet.sport_event)
+        weather_risk = risk_level(record)
+        candidates.append((record, score, weather_risk))
+
+    non_high = [item for item in candidates if item[2] != "高"]
+    risk_warning = ""
+    if non_high:
+        pool = non_high
+    else:
+        pool = candidates
+        risk_warning = "天气风险较高，建议人工复核或调整。"
+
+    best_record, best_score, best_risk = sorted(
+        pool,
+        key=lambda item: (-item[1], item[0].forecast_time),
+    )[0]
+    return best_record, best_score, best_risk, risk_warning
+
+
+def choose_best_venue(meet, scheduled_date, start_time, end_time):
+    fallback_note = ""
+    preferred = meet.venue
+    if preferred:
+        venue_valid = (
+            preferred.campus_id == meet.campus_id
+            and preferred.status == "available"
+            and preferred.capacity >= meet.expected_people
+            and not venue_has_conflict(preferred, scheduled_date, start_time, end_time, meet=meet)
+        )
+        if venue_valid:
+            return preferred, "沿用活动原指定场地（满足校区、状态、容量与时间要求）。"
+        fallback_note = "原指定场地不满足条件，系统已自动选择候选场地。"
+
+    candidates = Venue.objects.filter(
+        campus=meet.campus,
+        status="available",
+        capacity__gte=meet.expected_people,
+    ).order_by("-indoor", "-capacity")
+
+    for venue in candidates:
+        if not venue_has_conflict(venue, scheduled_date, start_time, end_time, meet=meet):
+            if fallback_note:
+                return venue, f"{fallback_note} 已选择同校区可用场地（室内优先、容量优先）。"
+            return venue, "系统自动匹配同校区可用场地（室内优先、容量优先）。"
+
+    return None, "未找到满足容量或时间条件的可用场地，请人工处理。"
 
 
 def login_view(request):
@@ -235,38 +320,54 @@ def suggestion_list(request):
 @role_required(ROLE_ADMIN, ROLE_TEACHER)
 def generate_schedule(request, meet_id):
     meet = get_object_or_404(Meet, id=meet_id)
+    duration = get_activity_duration(meet)
+    best_record, best_score, weather_risk, risk_warning = choose_best_weather_slot(meet)
 
-    weather = WeatherRecord.objects.filter(
-        campus=meet.campus,
-        forecast_time__date=meet.planned_date,
-        forecast_time__hour=meet.planned_start_time.hour,
-    ).first()
+    if best_record:
+        scheduled_date = best_record.forecast_time.date()
+        scheduled_start_time = best_record.forecast_time.time().replace(second=0, microsecond=0)
+    else:
+        scheduled_date = meet.planned_date
+        scheduled_start_time = meet.planned_start_time.replace(second=0, microsecond=0)
 
-    chosen_venue = meet.venue
-    if not chosen_venue:
-        chosen_venue = Venue.objects.filter(
-            campus=meet.campus,
-            status="available",
-            capacity__gte=meet.expected_people,
-        ).order_by("-indoor", "-capacity").first()
+    start_dt = datetime.combine(scheduled_date, scheduled_start_time)
+    scheduled_end_time = (start_dt + duration).time().replace(second=0, microsecond=0)
+    chosen_venue, venue_note = choose_best_venue(meet, scheduled_date, scheduled_start_time, scheduled_end_time)
 
-    weather_risk = "未知"
-    notes = "依据活动计划时间自动生成。"
+    weather_summary = "无天气记录"
+    if best_record:
+        weather_summary = (
+            f"{weather_text(best_record.weather_code)}，温度 {best_record.temperature}℃，"
+            f"降水 {best_record.precipitation}mm，风速 {best_record.wind_speed}m/s"
+        )
 
-    if weather:
-        weather_risk = risk_level(weather)
-        notes += f" 预计天气：{weather_text(weather.weather_code)}，{weather.temperature}℃。"
-        if weather_risk == "高":
-            notes += " 建议考虑室内或备用时段。"
+    notes_parts = [
+        (
+            f"原计划时间：{meet.planned_date} "
+            f"{meet.planned_start_time.strftime('%H:%M')}-{meet.planned_end_time.strftime('%H:%M')}。"
+        ),
+        (
+            f"系统推荐时间：{scheduled_date} "
+            f"{scheduled_start_time.strftime('%H:%M')}-{scheduled_end_time.strftime('%H:%M')}。"
+        ),
+        f"天气情况：{weather_summary}。",
+        f"运动适宜度评分：{best_score}（采用与智能建议一致的 calculate_sport_score 评分规则）。",
+        "时间选择原因：优先规避高风险天气，在低风险候选中选择评分最高且时间更早的时段。",
+        f"场地选择原因：{venue_note}",
+    ]
+    if risk_warning:
+        notes_parts.append(risk_warning)
+
+    notes = "\n".join(notes_parts)
 
     FinalSchedule.objects.update_or_create(
         meet=meet,
         defaults={
             "campus": meet.campus,
             "venue": chosen_venue,
-            "scheduled_date": meet.planned_date,
-            "scheduled_start_time": meet.planned_start_time,
-            "scheduled_end_time": meet.planned_end_time,
+            "scheduled_date": scheduled_date,
+            "scheduled_start_time": scheduled_start_time,
+            "scheduled_end_time": scheduled_end_time,
             "weather_risk": weather_risk,
             "notes": notes,
         },
@@ -276,18 +377,22 @@ def generate_schedule(request, meet_id):
     meet.save(update_fields=["status"])
 
     Notification.objects.create(
-        title="活动已自动排程",
-        content=f"《{meet.title}》已生成最终排程。",
+        title="活动已智能排期",
+        content=(
+            f"《{meet.title}》推荐时间为 {scheduled_date} {scheduled_start_time.strftime('%H:%M')}，"
+            f"场地：{chosen_venue.name if chosen_venue else '未分配'}，天气风险：{weather_risk}。"
+        ),
         notification_type="schedule",
     )
-    messages.success(request, f"《{meet.title}》排程成功")
+    messages.success(request, f"《{meet.title}》智能排期成功")
     return redirect("schedule_list")
 
 
 @login_required
 def schedule_list(request):
     items = FinalSchedule.objects.select_related("meet", "campus", "venue").all()
-    return render(request, "core/schedule_list.html", {"items": items})
+    pending_meets = Meet.objects.select_related("campus", "sport_event").filter(status="pending")
+    return render(request, "core/schedule_list.html", {"items": items, "pending_meets": pending_meets})
 
 
 @role_required(ROLE_ADMIN, ROLE_TEACHER)
