@@ -459,7 +459,7 @@ def process_venue_feedback(request, feedback_id):
     feedback = get_object_or_404(VenueFeedback, id=feedback_id)
     form = VenueFeedbackReplyForm(request.POST or None, instance=feedback)
     if form.is_valid():
-        form.save()
+        feedback = form.save()
         Notification.objects.create(
             title="场地反馈已处理",
             content=f"你提交的场地反馈已处理，回复：{feedback.reply}",
@@ -475,7 +475,7 @@ def process_weather_feedback(request, feedback_id):
     feedback = get_object_or_404(WeatherFeedback, id=feedback_id)
     form = WeatherFeedbackReplyForm(request.POST or None, instance=feedback)
     if form.is_valid():
-        form.save()
+        feedback = form.save()
         Notification.objects.create(
             title="天气反馈已处理",
             content=f"你提交的天气反馈已处理，回复：{feedback.reply}",

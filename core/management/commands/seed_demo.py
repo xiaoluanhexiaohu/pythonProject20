@@ -213,8 +213,11 @@ class Command(BaseCommand):
             VenueFeedback.objects.update_or_create(
                 student=student_user,
                 venue=demo_venue,
-                content="场地整体不错，建议补充更多夜间照明。",
-                defaults={"status": "pending"},
+                defaults={
+                    "content": "场地整体不错，建议补充更多夜间照明。",
+                    "status": "pending",
+                    "reply": "",
+                },
             )
 
         weather_record = WeatherRecord.objects.filter(campus=main_campus).order_by("forecast_time").first()
@@ -234,10 +237,11 @@ class Command(BaseCommand):
         WeatherFeedback.objects.update_or_create(
             student=student_user,
             campus=main_campus,
-            content="今天体感偏热，建议增加防暑提醒。",
             defaults={
                 "weather_record": weather_record,
+                "content": "今天体感偏热，建议增加防暑提醒。",
                 "status": "pending",
+                "reply": "",
             },
         )
 
