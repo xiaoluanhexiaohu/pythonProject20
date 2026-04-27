@@ -1,0 +1,18 @@
+{% extends 'core/base.html' %}
+{% block content %}
+<div class="card">
+    <h3>用户管理</h3>
+    <table>
+        <tr><th>用户名</th><th>显示名称</th><th>邮箱</th><th>角色</th><th>启用</th><th>超级用户</th><th>注册时间</th><th>最后登录</th><th>操作</th></tr>
+        {% for u in users %}
+        <tr>
+            <td>{{ u.username }}</td><td>{{ u.profile.display_name }}</td><td>{{ u.email }}</td>
+            <td>{% if u.is_superuser %}管理员{% else %}{{ u.profile.get_role_display }}{% endif %}</td>
+            <td>{{ u.is_active|yesno:"是,否" }}</td><td>{{ u.is_superuser|yesno:"是,否" }}</td>
+            <td>{{ u.date_joined|date:"Y-m-d H:i" }}</td><td>{{ u.last_login|date:"Y-m-d H:i" }}</td>
+            <td><a class="btn" href="/users/{{ u.id }}/edit/">编辑授权</a></td>
+        </tr>
+        {% endfor %}
+    </table>
+</div>
+{% endblock %}

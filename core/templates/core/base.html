@@ -10,23 +10,11 @@
         .nav a { color: #fff; text-decoration: none; font-size: 14px; }
         .container { width: 92%; max-width: 1200px; margin: 24px auto; }
         .card { background: #fff; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,.06); padding: 18px; margin-bottom: 18px; }
-        .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 16px; }
         table { width: 100%; border-collapse: collapse; background: #fff; }
         th, td { border: 1px solid #e8ebf0; padding: 10px; font-size: 14px; text-align: left; }
         th { background: #f3f6fa; }
         .btn { display: inline-block; background: #1f73f1; color: #fff; text-decoration: none; padding: 8px 14px; border-radius: 8px; border: none; cursor: pointer; }
-        .btn.gray { background: #6c757d; }
-        .btn.green { background: #28a745; }
-        .btn.orange { background: #f59f00; }
-        .toolbar { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 16px; }
-        input, select, textarea { width: 100%; padding: 10px; border: 1px solid #cfd6df; border-radius: 8px; box-sizing: border-box; }
-        label { font-size: 14px; font-weight: bold; display: block; margin-bottom: 6px; }
-        .form-group { margin-bottom: 14px; }
         .msg { padding: 12px; background: #e9f7ef; border-left: 4px solid #28a745; border-radius: 6px; margin-bottom: 14px; }
-        .tag { padding: 4px 10px; border-radius: 999px; font-size: 12px; display: inline-block; }
-        .tag.low { background: #e6f7ee; color: #1d7f48; }
-        .tag.mid { background: #fff3cd; color: #946200; }
-        .tag.high { background: #fde2e1; color: #b42318; }
     </style>
 </head>
 <body>
@@ -37,41 +25,58 @@
             <a href="/venues/">场地管理</a>
             <a href="/events/">运动项目</a>
             <a href="/meets/">活动管理</a>
-            <a href="/weather/">天气中心</a>
-            <a href="/alerts/">预警中心</a>
-            <a href="/suggestions/">智能建议</a>
-            <a href="/schedules/">最终排程</a>
-            <a href="/analytics/">统计分析</a>
-            <a href="/notifications/">系统通知</a>
-            {% if request.user.profile.role == "student" %}
+
+            {% if request.user.is_superuser or request.user.profile.role == "admin" or request.user.profile.can_view_weather or request.user.profile.role == "teacher" %}
+                <a href="/weather/">天气中心</a>
+            {% endif %}
+            {% if request.user.is_superuser or request.user.profile.role == "admin" or request.user.profile.can_view_alerts %}
+                <a href="/alerts/">预警中心</a>
+            {% endif %}
+            {% if request.user.is_superuser or request.user.profile.role == "admin" or request.user.profile.can_view_suggestions or request.user.profile.can_generate_suggestions %}
+                <a href="/suggestions/">智能建议</a>
+            {% endif %}
+            {% if request.user.is_superuser or request.user.profile.role == "admin" or request.user.profile.can_view_schedule or request.user.profile.can_generate_schedule %}
+                <a href="/schedules/">最终排程</a>
+            {% endif %}
+            {% if request.user.is_superuser or request.user.profile.role == "admin" or request.user.profile.can_view_statistics %}
+                <a href="/analytics/">统计分析</a>
+            {% endif %}
+
+            {% if request.user.is_superuser or request.user.profile.role == "admin" or request.user.profile.can_view_own_notifications or request.user.profile.role == "teacher" %}
+                <a href="/notifications/">系统通知</a>
+            {% endif %}
+
+            {% if request.user.profile.role == "student" and request.user.profile.can_register_activity %}
                 <a href="/my-registrations/">我的报名</a>
+            {% endif %}
+            {% if request.user.profile.role == "student" and request.user.profile.can_submit_feedback %}
                 <a href="/my-feedbacks/">我的反馈</a>
             {% endif %}
-            {% if request.user.profile.role == "admin" or request.user.profile.role == "teacher" or request.user.is_superuser %}
+
+            {% if request.user.is_superuser or request.user.profile.role == "admin" or request.user.profile.can_manage_feedback %}
                 <a href="/feedbacks/manage/">反馈管理</a>
             {% endif %}
-            {% if request.user.profile.role == "admin" or request.user.is_superuser %}
+            {% if request.user.is_superuser or request.user.profile.role == "admin" or request.user.profile.can_manage_registrations %}
+                <a href="/registrations/manage/">活动报名管理</a>
+            {% endif %}
+            {% if request.user.is_superuser or request.user.profile.role == "admin" %}
+                <a href="/users/">用户管理</a>
                 <a href="/operation-logs/">操作日志</a>
             {% endif %}
             <a href="/logout/">退出登录</a>
         {% else %}
             <a href="/login/">登录</a>
+            <a href="/register/">注册</a>
         {% endif %}
     </div>
+
     <div class="container">
         {% if request.user.is_authenticated %}
             <div class="card" style="padding:12px 16px;">
-                当前用户：<strong>{{ request.user.username }}</strong>
-                {% if request.user.profile %}
-                    ｜角色：<strong>{{ request.user.profile.get_role_display }}</strong>
-                {% endif %}
+                当前用户：<strong>{{ request.user.username }}</strong> ｜角色：<strong>{% if request.user.is_superuser %}管理员{% else %}{{ request.user.profile.get_role_display }}{% endif %}</strong>
             </div>
         {% endif %}
-        {% if messages %}
-            {% for message in messages %}
-                <div class="msg">{{ message }}</div>
-            {% endfor %}
-        {% endif %}
+        {% if messages %}{% for message in messages %}<div class="msg">{{ message }}</div>{% endfor %}{% endif %}
         {% block content %}{% endblock %}
     </div>
 </body>

@@ -1,10 +1,15 @@
 from django.urls import path
+
 from . import views
 
 urlpatterns = [
     path("login/", views.login_view, name="login"),
+    path("register/", views.register, name="register"),
     path("logout/", views.logout_view, name="logout"),
     path("", views.dashboard, name="dashboard"),
+
+    path("users/", views.user_manage, name="user_manage"),
+    path("users/<int:user_id>/edit/", views.user_edit, name="user_edit"),
 
     path("campuses/", views.campus_list, name="campus_list"),
     path("campuses/create/", views.campus_create, name="campus_create"),
@@ -20,6 +25,10 @@ urlpatterns = [
     path("meets/<int:meet_id>/register/", views.register_meet, name="register_meet"),
     path("meets/<int:meet_id>/cancel-registration/", views.cancel_registration, name="cancel_registration"),
     path("my-registrations/", views.my_registrations, name="my_registrations"),
+    path("registrations/manage/", views.registration_manage, name="registration_manage"),
+    path("meets/<int:meet_id>/registrations/", views.meet_registration_manage, name="meet_registration_manage"),
+    path("registrations/<int:registration_id>/approve/", views.approve_registration, name="approve_registration"),
+    path("registrations/<int:registration_id>/reject/", views.reject_registration, name="reject_registration"),
 
     path("weather/", views.weather_center, name="weather_center"),
     path("weather/refresh/", views.refresh_weather, name="refresh_weather"),

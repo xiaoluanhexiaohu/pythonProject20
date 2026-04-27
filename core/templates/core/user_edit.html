@@ -1,0 +1,17 @@
+{% extends 'core/base.html' %}
+{% block content %}
+<div class="card">
+    <h3>编辑用户：{{ managed_user.username }}</h3>
+    {% if managed_user.is_superuser %}<p>该用户是超级管理员，不建议修改角色。</p>{% endif %}
+    <form method="post">{% csrf_token %}
+        <div class="form-group">{{ form.display_name.label_tag }} {{ form.display_name }}</div>
+        <div class="form-group">{{ form.role.label_tag }} {{ form.role }}</div>
+        <div class="form-group">{{ form.is_active }} {{ form.is_active.label_tag }}</div>
+        <h4>学生端权限</h4>
+        {% for f in form %}{% if 'can_view_' in f.name or f.name == 'can_register_activity' or f.name == 'can_submit_feedback' %}<div>{{ f }} {{ f.label }}</div>{% endif %}{% endfor %}
+        <h4>教师端权限</h4>
+        {% for f in form %}{% if 'can_manage_' in f.name or 'can_generate_' in f.name or f.name == 'can_view_statistics' or f.name == 'can_send_notifications' %}<div>{{ f }} {{ f.label }}</div>{% endif %}{% endfor %}
+        <button class="btn" type="submit">保存</button>
+    </form>
+</div>
+{% endblock %}

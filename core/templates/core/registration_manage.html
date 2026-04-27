@@ -1,0 +1,24 @@
+{% extends 'core/base.html' %}
+{% block content %}
+<div class="card">
+    <h3>活动报名审核</h3>
+    <div class="toolbar">
+        <a class="btn" href="?status=pending">待审核</a>
+        <a class="btn" href="?status=approved">已批准</a>
+        <a class="btn" href="?status=rejected">未通过</a>
+        <a class="btn" href="?status=cancelled">已取消</a>
+        <a class="btn" href="?status=all">全部</a>
+    </div>
+    <table>
+        <tr><th>学生</th><th>活动</th><th>校区</th><th>场地</th><th>项目</th><th>状态</th><th>报名备注</th><th>审核意见</th><th>报名时间</th><th>操作</th></tr>
+        {% for item in items %}
+        <tr>
+            <td>{{ item.student.username }}</td><td>{{ item.meet.title }}</td><td>{{ item.meet.campus.name }}</td><td>{{ item.meet.venue.name|default:'未指定' }}</td>
+            <td>{{ item.meet.sport_event.name }}</td><td>{{ item.get_status_display }}</td><td>{{ item.apply_reason|default:'-' }}</td><td>{{ item.review_reason|default:'-' }}</td>
+            <td>{{ item.created_at|date:'Y-m-d H:i' }}</td>
+            <td>{% if item.status == 'pending' %}<a class="btn" href="/registrations/{{ item.id }}/approve/">批准</a> <a class="btn" href="/registrations/{{ item.id }}/reject/">不批准</a>{% else %}-{% endif %}</td>
+        </tr>
+        {% endfor %}
+    </table>
+</div>
+{% endblock %}
