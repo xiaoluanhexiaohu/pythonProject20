@@ -43,6 +43,13 @@
             <a href="/schedules/">最终排程</a>
             <a href="/analytics/">统计分析</a>
             <a href="/notifications/">系统通知</a>
+            {% if request.user.profile.role == "student" %}
+                <a href="/my-registrations/">我的报名</a>
+                <a href="/my-feedbacks/">我的反馈</a>
+            {% endif %}
+            {% if request.user.profile.role == "admin" or request.user.profile.role == "teacher" or request.user.is_superuser %}
+                <a href="/feedbacks/manage/">反馈管理</a>
+            {% endif %}
             {% if request.user.profile.role == "admin" or request.user.is_superuser %}
                 <a href="/operation-logs/">操作日志</a>
             {% endif %}

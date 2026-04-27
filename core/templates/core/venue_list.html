@@ -6,7 +6,7 @@
 <div class="card">
     <h3>场地列表</h3>
     <table>
-        <tr><th>校区</th><th>名称</th><th>类型</th><th>容量</th><th>状态</th><th>室内</th><th>照明</th></tr>
+        <tr><th>校区</th><th>名称</th><th>类型</th><th>容量</th><th>状态</th><th>室内</th><th>照明</th><th>操作</th></tr>
         {% for item in items %}
         <tr>
             <td>{{ item.campus.name }}</td>
@@ -16,9 +16,16 @@
             <td>{{ item.get_status_display }}</td>
             <td>{% if item.indoor %}是{% else %}否{% endif %}</td>
             <td>{% if item.has_lighting %}是{% else %}否{% endif %}</td>
+            <td>
+                {% if request.user.profile.role == "student" %}
+                    <a class="btn green" href="/feedbacks/venue/create/{{ item.id }}/">提交反馈</a>
+                {% else %}
+                    -
+                {% endif %}
+            </td>
         </tr>
         {% empty %}
-        <tr><td colspan="7">暂无数据</td></tr>
+        <tr><td colspan="8">暂无数据</td></tr>
         {% endfor %}
     </table>
 </div>

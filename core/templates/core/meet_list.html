@@ -6,7 +6,7 @@
 <div class="card">
     <h3>活动列表</h3>
     <table>
-        <tr><th>名称</th><th>校区</th><th>场地</th><th>项目</th><th>日期</th><th>时间</th><th>人数</th><th>状态</th><th>操作</th></tr>
+        <tr><th>名称</th><th>校区</th><th>场地</th><th>项目</th><th>日期</th><th>时间</th><th>报名人数 / 容量</th><th>状态</th><th>操作</th></tr>
         {% for item in items %}
         <tr>
             <td>{{ item.title }}</td>
@@ -15,12 +15,24 @@
             <td>{{ item.sport_event.name }}</td>
             <td>{{ item.planned_date }}</td>
             <td>{{ item.planned_start_time }} - {{ item.planned_end_time }}</td>
-            <td>{{ item.expected_people }}</td>
+            <td>{{ item.registered_count }} / {{ item.capacity_limit }}</td>
             <td>{{ item.get_status_display }}</td>
             <td>
                 {% if request.user.profile.role == "admin" or request.user.profile.role == "teacher" or request.user.is_superuser %}
                     {% if item.status == "pending" %}
                         <a class="btn green" href="/schedules/generate/{{ item.id }}/">智能排期</a>
+                    {% else %}
+                        -
+                    {% endif %}
+                {% elif request.user.profile.role == "student" %}
+                    {% if item.status == "completed" or item.status == "cancelled" %}
+                        不可报名
+                    {% elif item.current_user_registered %}
+                        <a class="btn orange" href="/meets/{{ item.id }}/cancel-registration/">取消报名</a>
+                    {% elif item.is_full %}
+                        已满
+                    {% elif item.can_register %}
+                        <a class="btn green" href="/meets/{{ item.id }}/register/">报名</a>
                     {% else %}
                         -
                     {% endif %}

@@ -1,0 +1,30 @@
+{% extends 'core/base.html' %}
+{% block content %}
+<div class="card">
+    <h3>我的报名</h3>
+    <table>
+        <tr><th>活动名称</th><th>校区</th><th>场地</th><th>运动项目</th><th>活动日期</th><th>活动时间</th><th>报名状态</th><th>报名时间</th><th>操作</th></tr>
+        {% for item in items %}
+        <tr>
+            <td>{{ item.meet.title }}</td>
+            <td>{{ item.meet.campus.name }}</td>
+            <td>{% if item.meet.venue %}{{ item.meet.venue.name }}{% else %}未指定{% endif %}</td>
+            <td>{{ item.meet.sport_event.name }}</td>
+            <td>{{ item.meet.planned_date }}</td>
+            <td>{{ item.meet.planned_start_time }} - {{ item.meet.planned_end_time }}</td>
+            <td>{{ item.get_status_display }}</td>
+            <td>{{ item.created_at|date:"Y-m-d H:i" }}</td>
+            <td>
+                {% if item.status == "registered" %}
+                    <a class="btn orange" href="/meets/{{ item.meet.id }}/cancel-registration/">取消报名</a>
+                {% else %}
+                    -
+                {% endif %}
+            </td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="9">暂无报名记录</td></tr>
+        {% endfor %}
+    </table>
+</div>
+{% endblock %}

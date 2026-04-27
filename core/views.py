@@ -5,21 +5,33 @@ from django.contrib import messages
 from django.contrib.auth import login, logout
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.forms import AuthenticationForm
-from django.db.models import Count
+from django.db.models import Count, Q, Case, When, Value, IntegerField
 from django.http import HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
 from django.views.decorators.http import require_GET
 
-from .forms import CampusForm, VenueForm, SportEventForm, MeetForm
-from .permissions import ROLE_ADMIN, ROLE_TEACHER, get_user_role, role_required
+from .forms import (
+    CampusForm,
+    VenueForm,
+    SportEventForm,
+    MeetForm,
+    VenueFeedbackForm,
+    WeatherFeedbackForm,
+    VenueFeedbackReplyForm,
+    WeatherFeedbackReplyForm,
+)
+from .permissions import ROLE_ADMIN, ROLE_TEACHER, ROLE_STUDENT, get_user_role, role_required
 from .models import (
     Campus,
     Venue,
     SportEvent,
     Meet,
+    ActivityRegistration,
     WeatherRecord,
     WeatherAlert,
+    VenueFeedback,
+    WeatherFeedback,
     Suggestion,
     FinalSchedule,
     Notification,
@@ -112,6 +124,13 @@ def choose_best_venue(meet, scheduled_date, start_time, end_time):
     return None, "未找到满足容量或时间条件的可用场地，请人工处理。"
 
 
+def get_meet_capacity_limit(meet):
+    capacity_limit = meet.expected_people
+    if meet.venue:
+        capacity_limit = min(meet.expected_people, meet.venue.capacity)
+    return max(capacity_limit, 0)
+
+
 def login_view(request):
     if request.user.is_authenticated:
         return redirect("dashboard")
@@ -193,8 +212,117 @@ def event_create(request):
 
 @login_required
 def meet_list(request):
-    items = Meet.objects.select_related("campus", "venue", "sport_event").all()
+    current_role = get_user_role(request.user)
+    items = (
+        Meet.objects.select_related("campus", "venue", "sport_event")
+        .annotate(
+            registered_count=Count(
+                "registrations",
+                filter=Q(registrations__status="registered"),
+            )
+        )
+        .all()
+    )
+    registration_map = {}
+    if current_role == ROLE_STUDENT:
+        registration_map = {
+            obj.meet_id: obj.status
+            for obj in ActivityRegistration.objects.filter(student=request.user)
+        }
+
+    for item in items:
+        item.capacity_limit = get_meet_capacity_limit(item)
+        item.is_full = item.registered_count >= item.capacity_limit
+        item.current_user_registered = registration_map.get(item.id) == "registered"
+        item.can_register = (
+            current_role == ROLE_STUDENT
+            and item.status not in ("completed", "cancelled")
+            and not item.current_user_registered
+            and not item.is_full
+        )
     return render(request, "core/meet_list.html", {"items": items})
+
+
+@login_required
+def register_meet(request, meet_id):
+    if get_user_role(request.user) != ROLE_STUDENT:
+        messages.error(request, "仅学生可以报名活动。")
+        return redirect("meet_list")
+
+    meet = get_object_or_404(Meet.objects.select_related("venue"), id=meet_id)
+    if meet.status in ("completed", "cancelled"):
+        messages.error(request, "该活动当前不可报名。")
+        return redirect("meet_list")
+
+    capacity_limit = get_meet_capacity_limit(meet)
+    registered_count = ActivityRegistration.objects.filter(meet=meet, status="registered").count()
+
+    existing_registration = ActivityRegistration.objects.filter(student=request.user, meet=meet).first()
+    if not existing_registration and registered_count >= capacity_limit:
+        messages.error(request, "该活动报名人数已满")
+        return redirect("meet_list")
+
+    registration, created = ActivityRegistration.objects.get_or_create(
+        student=request.user,
+        meet=meet,
+        defaults={"status": "registered"},
+    )
+    if not created:
+        if registration.status == "registered":
+            messages.info(request, "你已经报名该活动")
+            return redirect("meet_list")
+        if registered_count >= capacity_limit:
+            messages.error(request, "该活动报名人数已满")
+            return redirect("meet_list")
+        registration.status = "registered"
+        registration.save(update_fields=["status", "updated_at"])
+    Notification.objects.create(
+        title="活动报名成功",
+        content=f"你已成功报名《{meet.title}》。",
+        notification_type="system",
+    )
+    messages.success(request, "报名成功")
+    return redirect("meet_list")
+
+
+@login_required
+def cancel_registration(request, meet_id):
+    if get_user_role(request.user) != ROLE_STUDENT:
+        messages.error(request, "仅学生可以取消报名。")
+        return redirect("meet_list")
+
+    meet = get_object_or_404(Meet, id=meet_id)
+    registration = ActivityRegistration.objects.filter(student=request.user, meet=meet).first()
+    if not registration:
+        messages.error(request, "未找到报名记录")
+        return redirect("meet_list")
+    if registration.status == "cancelled":
+        messages.info(request, "该报名已取消")
+        return redirect("meet_list")
+
+    registration.status = "cancelled"
+    registration.save(update_fields=["status", "updated_at"])
+    Notification.objects.create(
+        title="活动报名已取消",
+        content=f"你已取消报名《{meet.title}》。",
+        notification_type="system",
+    )
+    messages.success(request, "取消报名成功")
+    return redirect("my_registrations")
+
+
+@login_required
+def my_registrations(request):
+    if get_user_role(request.user) != ROLE_STUDENT:
+        messages.info(request, "该页面为学生报名记录页面")
+        return redirect("meet_list")
+    items = ActivityRegistration.objects.select_related(
+        "meet",
+        "meet__campus",
+        "meet__venue",
+        "meet__sport_event",
+    ).filter(student=request.user)
+    return render(request, "core/my_registrations.html", {"items": items})
 
 
 @role_required(ROLE_ADMIN, ROLE_TEACHER)
@@ -239,6 +367,123 @@ def weather_center(request):
         "next_7d": next_7d,
     }
     return render(request, "core/weather_center.html", context)
+
+
+@login_required
+def submit_venue_feedback(request, venue_id=None):
+    if get_user_role(request.user) != ROLE_STUDENT:
+        messages.error(request, "仅学生可以提交场地反馈。")
+        return redirect("venue_list")
+
+    initial = {}
+    if venue_id:
+        initial["venue"] = get_object_or_404(Venue, id=venue_id)
+
+    form = VenueFeedbackForm(request.POST or None, initial=initial)
+    if form.is_valid():
+        feedback = form.save(commit=False)
+        feedback.student = request.user
+        feedback.save()
+        Notification.objects.create(
+            title="场地反馈已提交",
+            content="你的场地反馈已提交，等待教师或管理员处理。",
+            notification_type="system",
+        )
+        messages.success(request, "场地反馈提交成功")
+        return redirect("my_feedbacks")
+    return render(request, "core/venue_feedback_form.html", {"form": form})
+
+
+@login_required
+def submit_weather_feedback(request):
+    if get_user_role(request.user) != ROLE_STUDENT:
+        messages.error(request, "仅学生可以提交天气反馈。")
+        return redirect("weather_center")
+
+    form = WeatherFeedbackForm(request.POST or None)
+    if form.is_valid():
+        feedback = form.save(commit=False)
+        feedback.student = request.user
+        feedback.save()
+        Notification.objects.create(
+            title="天气反馈已提交",
+            content="你的天气反馈已提交，等待教师或管理员处理。",
+            notification_type="system",
+        )
+        messages.success(request, "天气反馈提交成功")
+        return redirect("my_feedbacks")
+    return render(request, "core/weather_feedback_form.html", {"form": form})
+
+
+@login_required
+def my_feedbacks(request):
+    if get_user_role(request.user) != ROLE_STUDENT:
+        messages.info(request, "该页面为学生反馈记录页面")
+        return redirect("dashboard")
+    venue_feedbacks = VenueFeedback.objects.select_related("venue", "venue__campus").filter(student=request.user)
+    weather_feedbacks = WeatherFeedback.objects.select_related("campus", "weather_record").filter(student=request.user)
+    return render(
+        request,
+        "core/my_feedbacks.html",
+        {"venue_feedbacks": venue_feedbacks, "weather_feedbacks": weather_feedbacks},
+    )
+
+
+@role_required(ROLE_ADMIN, ROLE_TEACHER)
+def feedback_manage(request):
+    venue_feedbacks = VenueFeedback.objects.select_related("student", "venue").order_by(
+        Case(
+            When(status="pending", then=Value(0)),
+            default=Value(1),
+            output_field=IntegerField(),
+        ),
+        "-created_at",
+    )
+    weather_feedbacks = WeatherFeedback.objects.select_related("student", "campus", "weather_record").order_by(
+        Case(
+            When(status="pending", then=Value(0)),
+            default=Value(1),
+            output_field=IntegerField(),
+        ),
+        "-created_at",
+    )
+    return render(
+        request,
+        "core/feedback_manage.html",
+        {"venue_feedbacks": venue_feedbacks, "weather_feedbacks": weather_feedbacks},
+    )
+
+
+@role_required(ROLE_ADMIN, ROLE_TEACHER)
+def process_venue_feedback(request, feedback_id):
+    feedback = get_object_or_404(VenueFeedback, id=feedback_id)
+    form = VenueFeedbackReplyForm(request.POST or None, instance=feedback)
+    if form.is_valid():
+        form.save()
+        Notification.objects.create(
+            title="场地反馈已处理",
+            content=f"你提交的场地反馈已处理，回复：{feedback.reply}",
+            notification_type="system",
+        )
+        messages.success(request, "场地反馈已处理")
+        return redirect("feedback_manage")
+    return render(request, "core/feedback_process_form.html", {"form": form, "title": "处理场地反馈"})
+
+
+@role_required(ROLE_ADMIN, ROLE_TEACHER)
+def process_weather_feedback(request, feedback_id):
+    feedback = get_object_or_404(WeatherFeedback, id=feedback_id)
+    form = WeatherFeedbackReplyForm(request.POST or None, instance=feedback)
+    if form.is_valid():
+        form.save()
+        Notification.objects.create(
+            title="天气反馈已处理",
+            content=f"你提交的天气反馈已处理，回复：{feedback.reply}",
+            notification_type="system",
+        )
+        messages.success(request, "天气反馈已处理")
+        return redirect("feedback_manage")
+    return render(request, "core/feedback_process_form.html", {"form": form, "title": "处理天气反馈"})
 
 
 @role_required(ROLE_ADMIN, ROLE_TEACHER)

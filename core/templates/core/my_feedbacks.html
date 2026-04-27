@@ -1,0 +1,38 @@
+{% extends 'core/base.html' %}
+{% block content %}
+<div class="card">
+    <h3>我的场地反馈</h3>
+    <table>
+        <tr><th>反馈对象</th><th>反馈内容</th><th>处理状态</th><th>教师/管理员回复</th><th>提交时间</th></tr>
+        {% for item in venue_feedbacks %}
+        <tr>
+            <td>{{ item.venue.name }}（{{ item.venue.campus.name }}）</td>
+            <td>{{ item.content }}</td>
+            <td>{{ item.get_status_display }}</td>
+            <td>{% if item.reply %}{{ item.reply }}{% else %}-{% endif %}</td>
+            <td>{{ item.created_at|date:"Y-m-d H:i" }}</td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="5">暂无场地反馈</td></tr>
+        {% endfor %}
+    </table>
+</div>
+
+<div class="card">
+    <h3>我的天气反馈</h3>
+    <table>
+        <tr><th>反馈对象</th><th>反馈内容</th><th>处理状态</th><th>教师/管理员回复</th><th>提交时间</th></tr>
+        {% for item in weather_feedbacks %}
+        <tr>
+            <td>{{ item.campus.name }}</td>
+            <td>{{ item.content }}</td>
+            <td>{{ item.get_status_display }}</td>
+            <td>{% if item.reply %}{{ item.reply }}{% else %}-{% endif %}</td>
+            <td>{{ item.created_at|date:"Y-m-d H:i" }}</td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="5">暂无天气反馈</td></tr>
+        {% endfor %}
+    </table>
+</div>
+{% endblock %}

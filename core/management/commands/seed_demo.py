@@ -2,8 +2,20 @@ from datetime import date, time, timedelta
 
 from django.contrib.auth import get_user_model
 from django.core.management.base import BaseCommand
+from django.utils import timezone
 
-from core.models import Campus, Venue, SportEvent, Meet, Notification, UserProfile
+from core.models import (
+    Campus,
+    Venue,
+    SportEvent,
+    Meet,
+    WeatherRecord,
+    Notification,
+    UserProfile,
+    ActivityRegistration,
+    VenueFeedback,
+    WeatherFeedback,
+)
 
 
 class Command(BaseCommand):
@@ -137,7 +149,7 @@ class Command(BaseCommand):
 
         tomorrow = date.today() + timedelta(days=1)
 
-        Meet.objects.get_or_create(
+        running_meet, _ = Meet.objects.get_or_create(
             title="春季校园跑活动",
             defaults={
                 "campus": main_campus,
@@ -187,6 +199,45 @@ class Command(BaseCommand):
             defaults={
                 "content": "演示数据已写入，可继续执行 fetch_weather 获取天气。",
                 "notification_type": "system",
+            },
+        )
+
+        ActivityRegistration.objects.update_or_create(
+            student=student_user,
+            meet=running_meet,
+            defaults={"status": "registered", "note": "演示报名记录"},
+        )
+
+        demo_venue = Venue.objects.filter(campus=main_campus).first()
+        if demo_venue:
+            VenueFeedback.objects.update_or_create(
+                student=student_user,
+                venue=demo_venue,
+                content="场地整体不错，建议补充更多夜间照明。",
+                defaults={"status": "pending"},
+            )
+
+        weather_record = WeatherRecord.objects.filter(campus=main_campus).order_by("forecast_time").first()
+        if not weather_record:
+            weather_record = WeatherRecord.objects.create(
+                campus=main_campus,
+                forecast_time=timezone.now() + timedelta(hours=1),
+                temperature=23,
+                apparent_temperature=24,
+                humidity=55,
+                precipitation=0,
+                wind_speed=3,
+                weather_code=1,
+                is_day=True,
+            )
+
+        WeatherFeedback.objects.update_or_create(
+            student=student_user,
+            campus=main_campus,
+            content="今天体感偏热，建议增加防暑提醒。",
+            defaults={
+                "weather_record": weather_record,
+                "status": "pending",
             },
         )
 
