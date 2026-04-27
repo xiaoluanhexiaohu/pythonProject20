@@ -136,6 +136,37 @@ class Meet(TimeStampedModel):
         return self.title
 
 
+class ActivityRegistration(TimeStampedModel):
+    STATUS_CHOICES = [
+        ("registered", "已报名"),
+        ("cancelled", "已取消"),
+    ]
+
+    student = models.ForeignKey(
+        get_user_model(),
+        on_delete=models.CASCADE,
+        related_name="activity_registrations",
+        verbose_name="学生",
+    )
+    meet = models.ForeignKey(
+        Meet,
+        on_delete=models.CASCADE,
+        related_name="registrations",
+        verbose_name="活动",
+    )
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default="registered", verbose_name="报名状态")
+    note = models.TextField(blank=True, verbose_name="备注")
+
+    class Meta:
+        verbose_name = "活动报名"
+        verbose_name_plural = "活动报名"
+        unique_together = ("student", "meet")
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return f"{self.student.username}-{self.meet.title}-{self.get_status_display()}"
+
+
 class WeatherRecord(TimeStampedModel):
     campus = models.ForeignKey(
         Campus,
@@ -193,6 +224,71 @@ class WeatherAlert(TimeStampedModel):
 
     def __str__(self):
         return self.title
+
+
+class VenueFeedback(TimeStampedModel):
+    STATUS_CHOICES = [
+        ("pending", "待处理"),
+        ("processed", "已处理"),
+    ]
+
+    student = models.ForeignKey(
+        get_user_model(),
+        on_delete=models.CASCADE,
+        related_name="venue_feedbacks",
+        verbose_name="学生",
+    )
+    venue = models.ForeignKey(Venue, on_delete=models.CASCADE, related_name="feedbacks", verbose_name="场地")
+    content = models.TextField(verbose_name="反馈内容")
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default="pending", verbose_name="处理状态")
+    reply = models.TextField(blank=True, verbose_name="处理回复")
+
+    class Meta:
+        verbose_name = "场地反馈"
+        verbose_name_plural = "场地反馈"
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return f"{self.student.username}-{self.venue.name}-{self.get_status_display()}"
+
+
+class WeatherFeedback(TimeStampedModel):
+    STATUS_CHOICES = [
+        ("pending", "待处理"),
+        ("processed", "已处理"),
+    ]
+
+    student = models.ForeignKey(
+        get_user_model(),
+        on_delete=models.CASCADE,
+        related_name="weather_feedbacks",
+        verbose_name="学生",
+    )
+    campus = models.ForeignKey(
+        Campus,
+        on_delete=models.CASCADE,
+        related_name="weather_feedbacks",
+        verbose_name="校区",
+    )
+    weather_record = models.ForeignKey(
+        WeatherRecord,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="feedbacks",
+        verbose_name="天气记录",
+    )
+    content = models.TextField(verbose_name="反馈内容")
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default="pending", verbose_name="处理状态")
+    reply = models.TextField(blank=True, verbose_name="处理回复")
+
+    class Meta:
+        verbose_name = "天气反馈"
+        verbose_name_plural = "天气反馈"
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return f"{self.student.username}-{self.campus.name}-{self.get_status_display()}"
 
 
 class Suggestion(TimeStampedModel):

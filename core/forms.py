@@ -1,5 +1,12 @@
 from django import forms
-from .models import Campus, Venue, SportEvent, Meet
+from .models import (
+    Campus,
+    Venue,
+    SportEvent,
+    Meet,
+    VenueFeedback,
+    WeatherFeedback,
+)
 
 
 class CampusForm(forms.ModelForm):
@@ -51,3 +58,27 @@ class MeetForm(forms.ModelForm):
             "planned_start_time": forms.TimeInput(attrs={"type": "time"}),
             "planned_end_time": forms.TimeInput(attrs={"type": "time"}),
         }
+
+
+class VenueFeedbackForm(forms.ModelForm):
+    class Meta:
+        model = VenueFeedback
+        fields = ["venue", "content"]
+
+
+class WeatherFeedbackForm(forms.ModelForm):
+    class Meta:
+        model = WeatherFeedback
+        fields = ["campus", "weather_record", "content"]
+
+
+class VenueFeedbackReplyForm(forms.ModelForm):
+    class Meta:
+        model = VenueFeedback
+        fields = ["status", "reply"]
+
+
+class WeatherFeedbackReplyForm(forms.ModelForm):
+    class Meta:
+        model = WeatherFeedback
+        fields = ["status", "reply"]

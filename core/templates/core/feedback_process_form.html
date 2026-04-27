@@ -1,0 +1,12 @@
+{% extends 'core/base.html' %}
+{% block content %}
+<div class="card">
+    <h3>{{ title }}</h3>
+    <form method="post">
+        {% csrf_token %}
+        {{ form.as_p }}
+        <button class="btn" type="submit">保存处理结果</button>
+        <a class="btn gray" href="/feedbacks/manage/">返回</a>
+    </form>
+</div>
+{% endblock %}

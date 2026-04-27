@@ -1,0 +1,42 @@
+{% extends 'core/base.html' %}
+{% block content %}
+<div class="card">
+    <h3>场地反馈管理</h3>
+    <table>
+        <tr><th>学生用户名</th><th>场地</th><th>反馈内容</th><th>状态</th><th>回复</th><th>提交时间</th><th>操作</th></tr>
+        {% for item in venue_feedbacks %}
+        <tr>
+            <td>{{ item.student.username }}</td>
+            <td>{{ item.venue.name }}</td>
+            <td>{{ item.content }}</td>
+            <td>{{ item.get_status_display }}</td>
+            <td>{% if item.reply %}{{ item.reply }}{% else %}-{% endif %}</td>
+            <td>{{ item.created_at|date:"Y-m-d H:i" }}</td>
+            <td><a class="btn green" href="/feedbacks/venue/{{ item.id }}/process/">处理</a></td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="7">暂无场地反馈</td></tr>
+        {% endfor %}
+    </table>
+</div>
+
+<div class="card">
+    <h3>天气反馈管理</h3>
+    <table>
+        <tr><th>学生用户名</th><th>校区</th><th>反馈内容</th><th>状态</th><th>回复</th><th>提交时间</th><th>操作</th></tr>
+        {% for item in weather_feedbacks %}
+        <tr>
+            <td>{{ item.student.username }}</td>
+            <td>{{ item.campus.name }}</td>
+            <td>{{ item.content }}</td>
+            <td>{{ item.get_status_display }}</td>
+            <td>{% if item.reply %}{{ item.reply }}{% else %}-{% endif %}</td>
+            <td>{{ item.created_at|date:"Y-m-d H:i" }}</td>
+            <td><a class="btn green" href="/feedbacks/weather/{{ item.id }}/process/">处理</a></td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="7">暂无天气反馈</td></tr>
+        {% endfor %}
+    </table>
+</div>
+{% endblock %}

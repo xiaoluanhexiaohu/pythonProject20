@@ -6,6 +6,9 @@
         {% if request.user.profile.role == "admin" or request.user.profile.role == "teacher" or request.user.is_superuser %}
             <a class="btn" href="/weather/refresh/">刷新全部校区天气</a>
         {% endif %}
+        {% if request.user.profile.role == "student" %}
+            <a class="btn green" href="/feedbacks/weather/create/">提交天气反馈</a>
+        {% endif %}
         <form method="get" style="display:flex; gap:10px; align-items:center;">
             <select name="campus">
                 {% for c in campuses %}

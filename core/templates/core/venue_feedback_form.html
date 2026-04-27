@@ -1,0 +1,12 @@
+{% extends 'core/base.html' %}
+{% block content %}
+<div class="card">
+    <h3>提交场地反馈</h3>
+    <form method="post">
+        {% csrf_token %}
+        {{ form.as_p }}
+        <button class="btn" type="submit">提交反馈</button>
+        <a class="btn gray" href="/venues/">返回</a>
+    </form>
+</div>
+{% endblock %}

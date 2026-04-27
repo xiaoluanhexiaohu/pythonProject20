@@ -17,10 +17,20 @@ urlpatterns = [
 
     path("meets/", views.meet_list, name="meet_list"),
     path("meets/create/", views.meet_create, name="meet_create"),
+    path("meets/<int:meet_id>/register/", views.register_meet, name="register_meet"),
+    path("meets/<int:meet_id>/cancel-registration/", views.cancel_registration, name="cancel_registration"),
+    path("my-registrations/", views.my_registrations, name="my_registrations"),
 
     path("weather/", views.weather_center, name="weather_center"),
     path("weather/refresh/", views.refresh_weather, name="refresh_weather"),
     path("alerts/", views.alert_center, name="alert_center"),
+    path("feedbacks/venue/create/", views.submit_venue_feedback, name="submit_venue_feedback"),
+    path("feedbacks/venue/create/<int:venue_id>/", views.submit_venue_feedback, name="submit_venue_feedback_for_venue"),
+    path("feedbacks/weather/create/", views.submit_weather_feedback, name="submit_weather_feedback"),
+    path("my-feedbacks/", views.my_feedbacks, name="my_feedbacks"),
+    path("feedbacks/manage/", views.feedback_manage, name="feedback_manage"),
+    path("feedbacks/venue/<int:feedback_id>/process/", views.process_venue_feedback, name="process_venue_feedback"),
+    path("feedbacks/weather/<int:feedback_id>/process/", views.process_weather_feedback, name="process_weather_feedback"),
 
     path("api/v1/weather/refresh/<int:campus_id>/", views.api_refresh_weather_v1, name="api_refresh_weather_v1"),
     path("api/v2/weather/refresh/<int:campus_id>/", views.api_refresh_weather_v2, name="api_refresh_weather_v2"),
