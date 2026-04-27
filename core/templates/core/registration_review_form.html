@@ -1,0 +1,10 @@
+{% extends 'core/base.html' %}
+{% block content %}
+<div class="card">
+    <h3>不批准报名：{{ registration.student.username }} - {{ registration.meet.title }}</h3>
+    <form method="post">{% csrf_token %}
+        {{ form.as_p }}
+        <button class="btn" type="submit">提交</button>
+    </form>
+</div>
+{% endblock %}

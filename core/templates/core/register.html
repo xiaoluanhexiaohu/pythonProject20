@@ -1,0 +1,19 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>注册</title></head>
+<body style="font-family:Arial;background:#f4f6fa;">
+<div style="max-width:460px;margin:70px auto;background:#fff;padding:24px;border-radius:12px;">
+    <h2>用户注册</h2>
+    <form method="post">{% csrf_token %}
+        <p>用户名 {{ form.username }}</p>
+        <p>邮箱 {{ form.email }}</p>
+        <p>显示名称 {{ form.display_name }}</p>
+        <p>密码 {{ form.password1 }}</p>
+        <p>确认密码 {{ form.password2 }}</p>
+        {{ form.errors }}
+        <button type="submit">注册</button>
+    </form>
+    <p><a href="/login/">已有账号？去登录</a></p>
+</div>
+</body>
+</html>

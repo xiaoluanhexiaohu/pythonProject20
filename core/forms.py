@@ -1,4 +1,7 @@
 from django import forms
+from django.contrib.auth import get_user_model
+from django.contrib.auth.forms import UserCreationForm
+
 from .models import (
     Campus,
     Venue,
@@ -6,6 +9,8 @@ from .models import (
     Meet,
     VenueFeedback,
     WeatherFeedback,
+    UserProfile,
+    ActivityRegistration,
 )
 
 
@@ -57,6 +62,52 @@ class MeetForm(forms.ModelForm):
             "planned_date": forms.DateInput(attrs={"type": "date"}),
             "planned_start_time": forms.TimeInput(attrs={"type": "time"}),
             "planned_end_time": forms.TimeInput(attrs={"type": "time"}),
+        }
+
+
+class RegisterForm(UserCreationForm):
+    email = forms.EmailField(required=False, label="邮箱")
+    display_name = forms.CharField(required=False, max_length=100, label="显示名称")
+
+    class Meta(UserCreationForm.Meta):
+        model = get_user_model()
+        fields = ("username", "email", "display_name", "password1", "password2")
+
+
+class UserEditForm(forms.Form):
+    ROLE_CHOICES = [
+        (UserProfile.ROLE_STUDENT, "学生"),
+        (UserProfile.ROLE_TEACHER, "教师"),
+    ]
+
+    display_name = forms.CharField(required=False, label="显示名称", max_length=100)
+    role = forms.ChoiceField(choices=ROLE_CHOICES, label="角色")
+    is_active = forms.BooleanField(required=False, label="是否启用")
+
+    can_view_weather = forms.BooleanField(required=False, label="学生-查看天气")
+    can_view_alerts = forms.BooleanField(required=False, label="学生-查看预警")
+    can_view_suggestions = forms.BooleanField(required=False, label="学生-查看智能建议")
+    can_view_schedule = forms.BooleanField(required=False, label="学生-查看排程")
+    can_register_activity = forms.BooleanField(required=False, label="学生-活动报名")
+    can_submit_feedback = forms.BooleanField(required=False, label="学生-提交反馈")
+    can_view_own_notifications = forms.BooleanField(required=False, label="学生-查看个人通知")
+
+    can_manage_meets = forms.BooleanField(required=False, label="教师-活动管理")
+    can_manage_registrations = forms.BooleanField(required=False, label="教师-报名审核")
+    can_manage_feedback = forms.BooleanField(required=False, label="教师-反馈处理")
+    can_generate_suggestions = forms.BooleanField(required=False, label="教师-生成智能建议")
+    can_generate_schedule = forms.BooleanField(required=False, label="教师-生成智能排程")
+    can_view_statistics = forms.BooleanField(required=False, label="教师-查看统计分析")
+    can_send_notifications = forms.BooleanField(required=False, label="教师-发布通知")
+
+
+class RegistrationRejectForm(forms.ModelForm):
+    class Meta:
+        model = ActivityRegistration
+        fields = ["review_reason"]
+        labels = {"review_reason": "审核意见"}
+        widgets = {
+            "review_reason": forms.Textarea(attrs={"rows": 4, "placeholder": "请输入不通过原因（可选）"}),
         }
 
 

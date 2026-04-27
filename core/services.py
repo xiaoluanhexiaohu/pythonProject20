@@ -40,6 +40,8 @@ class WeatherService:
                 f"激活预警 {active_alert_count} 条，生成建议 {created_suggestions} 条。"
             ),
             notification_type="weather",
+            target_role="student",
+            source_module="weather_alert",
         )
 
         return {
@@ -237,7 +239,7 @@ class WeatherService:
 
         for level, title, message in alerts[:20]:
             WeatherAlert.objects.create(campus=campus, level=level, title=title, message=message, active=True)
-            Notification.objects.create(title=title, content=message, notification_type="weather")
+            Notification.objects.create(title=title, content=message, notification_type="weather", target_role="student", source_module="weather_alert")
 
     @staticmethod
     def _refresh_suggestions_for_campus(campus: Campus) -> int:
