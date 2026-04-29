@@ -42,6 +42,14 @@ class SportEventForm(forms.ModelForm):
 
 
 class MeetForm(forms.ModelForm):
+    planned_date = forms.DateField(
+        required=False,
+        widget=forms.DateInput(attrs={"type": "date"}),
+        help_text="原计划时间可选；不填写则由系统自动选择最佳时间。",
+    )
+    planned_start_time = forms.TimeField(required=False, widget=forms.TimeInput(attrs={"type": "time"}))
+    planned_end_time = forms.TimeField(required=False, widget=forms.TimeInput(attrs={"type": "time"}))
+
     class Meta:
         model = Meet
         fields = [
@@ -50,6 +58,7 @@ class MeetForm(forms.ModelForm):
             "venue",
             "sport_event",
             "expected_people",
+            "activity_duration_minutes",
             "planned_date",
             "planned_start_time",
             "planned_end_time",
@@ -58,11 +67,30 @@ class MeetForm(forms.ModelForm):
             "note",
             "status",
         ]
-        widgets = {
-            "planned_date": forms.DateInput(attrs={"type": "date"}),
-            "planned_start_time": forms.TimeInput(attrs={"type": "time"}),
-            "planned_end_time": forms.TimeInput(attrs={"type": "time"}),
+        help_texts = {
+            "activity_duration_minutes": "必填，单位分钟，必须大于 0。",
+            "planned_date": "原计划时间可选；不填写则由系统自动选择最佳时间。",
         }
+
+    def clean_activity_duration_minutes(self):
+        value = self.cleaned_data.get("activity_duration_minutes")
+        if value is None or value <= 0:
+            raise forms.ValidationError("活动总时长必须大于 0。")
+        return value
+
+    def clean(self):
+        cleaned_data = super().clean()
+        planned_date = cleaned_data.get("planned_date")
+        start_time = cleaned_data.get("planned_start_time")
+        end_time = cleaned_data.get("planned_end_time")
+
+        if start_time and not planned_date:
+            self.add_error("planned_date", "填写原计划开始时间时，必须同时填写原计划日期。")
+        if end_time and not start_time:
+            self.add_error("planned_start_time", "填写原计划结束时间时，必须同时填写原计划开始时间。")
+        if start_time and end_time and end_time <= start_time:
+            self.add_error("planned_end_time", "原计划结束时间必须晚于原计划开始时间。")
+        return cleaned_data
 
 
 class RegisterForm(UserCreationForm):

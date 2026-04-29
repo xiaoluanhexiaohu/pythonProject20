@@ -9,17 +9,18 @@
 <div class="card">
     <h3>待安排活动</h3>
     <table>
-        <tr><th>活动名称</th><th>校区</th><th>项目</th><th>计划时间</th><th>操作</th></tr>
+        <tr><th>活动名称</th><th>校区</th><th>项目</th><th>总时长(分钟)</th><th>计划时间</th><th>操作</th></tr>
         {% for meet in pending_meets %}
         <tr>
             <td>{{ meet.title }}</td>
             <td>{{ meet.campus.name }}</td>
             <td>{{ meet.sport_event.name }}</td>
-            <td>{{ meet.planned_date }} {{ meet.planned_start_time }} - {{ meet.planned_end_time }}</td>
+            <td>{{ meet.activity_duration_minutes }}</td>
+            <td>{% if meet.planned_date and meet.planned_start_time %}{{ meet.planned_date }} {{ meet.planned_start_time }} - {{ meet.planned_end_time|default:'自动计算' }}{% else %}未指定，由系统自动排程{% endif %}</td>
             <td><a class="btn green" href="/schedules/generate/{{ meet.id }}/">智能排期</a></td>
         </tr>
         {% empty %}
-        <tr><td colspan="5">暂无待安排活动</td></tr>
+        <tr><td colspan="6">暂无待安排活动</td></tr>
         {% endfor %}
     </table>
 </div>
@@ -27,12 +28,13 @@
 <div class="card">
     <h3>最终排程列表</h3>
     <table>
-        <tr><th>活动名称</th><th>校区</th><th>场地</th><th>排程日期</th><th>开始时间</th><th>结束时间</th><th>天气风险</th><th>说明</th></tr>
+        <tr><th>活动名称</th><th>校区</th><th>场地</th><th>总时长(分钟)</th><th>排程日期</th><th>开始时间</th><th>结束时间</th><th>天气风险</th><th>说明</th></tr>
         {% for item in items %}
         <tr>
             <td>{{ item.meet.title }}</td>
             <td>{{ item.campus.name }}</td>
             <td>{% if item.venue %}{{ item.venue.name }}{% else %}未分配{% endif %}</td>
+            <td>{{ item.meet.activity_duration_minutes }}</td>
             <td>{{ item.scheduled_date }}</td>
             <td>{{ item.scheduled_start_time }}</td>
             <td>{{ item.scheduled_end_time }}</td>
@@ -48,7 +50,7 @@
             <td style="white-space: pre-line;">{{ item.notes }}</td>
         </tr>
         {% empty %}
-        <tr><td colspan="8">暂无最终排程</td></tr>
+        <tr><td colspan="9">暂无最终排程</td></tr>
         {% endfor %}
     </table>
 </div>
