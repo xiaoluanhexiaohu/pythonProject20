@@ -6,11 +6,13 @@
 <div class="card">
     <h3>活动列表</h3>
     <table>
-        <tr><th>名称</th><th>校区</th><th>场地</th><th>项目</th><th>日期</th><th>时间</th><th>状态</th><th>报名人数/容量</th><th>待审核</th><th>我的状态</th><th>操作</th></tr>
+        <tr><th>名称</th><th>校区</th><th>场地</th><th>项目</th><th>总时长(分钟)</th><th>原计划日期</th><th>原计划时间</th><th>状态</th><th>报名人数/容量</th><th>待审核</th><th>我的状态</th><th>操作</th></tr>
         {% for item in items %}
         <tr>
             <td>{{ item.title }}</td><td>{{ item.campus.name }}</td><td>{% if item.venue %}{{ item.venue.name }}{% else %}未指定{% endif %}</td><td>{{ item.sport_event.name }}</td>
-            <td>{{ item.planned_date }}</td><td>{{ item.planned_start_time }} - {{ item.planned_end_time }}</td><td>{{ item.get_status_display }}</td>
+            <td>{{ item.activity_duration_minutes }}</td>
+            <td>{% if item.planned_date %}{{ item.planned_date }}{% else %}未指定，由系统自动排程{% endif %}</td>
+            <td>{% if item.planned_start_time %}{{ item.planned_start_time }} - {{ item.planned_end_time|default:'自动计算' }}{% else %}未指定，由系统自动排程{% endif %}</td><td>{{ item.get_status_display }}</td>
             <td>{{ item.approved_count }} / {{ item.capacity_limit }}</td><td>{{ item.pending_count }}</td>
             <td>{{ item.current_registration_status|default:'未报名' }}</td>
             <td>
@@ -26,7 +28,7 @@
             {% else %}-{% endif %}
             </td>
         </tr>
-        {% empty %}<tr><td colspan="11">暂无数据</td></tr>{% endfor %}
+        {% empty %}<tr><td colspan="12">暂无数据</td></tr>{% endfor %}
     </table>
 </div>
 {% endblock %}

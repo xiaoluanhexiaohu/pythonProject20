@@ -1,5 +1,5 @@
 import csv
-from datetime import datetime, timedelta
+from datetime import datetime, time, timedelta
 
 from django.contrib import messages
 from django.contrib.auth import get_user_model, login, logout
@@ -53,6 +53,11 @@ from .permissions import (
 from .services import WeatherService
 from .utils import calculate_sport_score, risk_level, weather_text
 
+ALLOWED_WINDOWS = [
+    (time(8, 0), time(12, 0)),
+    (time(13, 30), time(18, 0)),
+]
+
 
 def create_notification(
     title,
@@ -77,10 +82,59 @@ def create_notification(
 
 
 def get_activity_duration(meet):
-    start_dt = datetime.combine(meet.planned_date, meet.planned_start_time)
-    end_dt = datetime.combine(meet.planned_date, meet.planned_end_time)
-    duration = end_dt - start_dt
-    return duration if duration > timedelta(0) else timedelta(hours=1)
+    minutes = getattr(meet, "activity_duration_minutes", None)
+    if minutes:
+        return timedelta(minutes=minutes)
+    if meet.planned_date and meet.planned_start_time and meet.planned_end_time:
+        start_dt = datetime.combine(meet.planned_date, meet.planned_start_time)
+        end_dt = datetime.combine(meet.planned_date, meet.planned_end_time)
+        duration = end_dt - start_dt
+        if duration > timedelta(0):
+            return duration
+    return timedelta(hours=1)
+
+
+def is_within_allowed_windows(start_dt, duration):
+    end_dt = start_dt + duration
+    for window_start, window_end in ALLOWED_WINDOWS:
+        ws = datetime.combine(start_dt.date(), window_start)
+        we = datetime.combine(start_dt.date(), window_end)
+        if start_dt >= ws and end_dt <= we:
+            return True
+    return False
+
+
+def move_to_next_allowed_start(dt):
+    dt = dt.replace(second=0, microsecond=0)
+    for window_start, window_end in ALLOWED_WINDOWS:
+        ws = datetime.combine(dt.date(), window_start)
+        we = datetime.combine(dt.date(), window_end)
+        if dt < ws:
+            return ws
+        if ws <= dt < we:
+            return dt
+    return datetime.combine(dt.date() + timedelta(days=1), ALLOWED_WINDOWS[0][0])
+
+
+def find_next_allowed_slot(start_dt, duration):
+    max_window = max(datetime.combine(datetime.today(), end) - datetime.combine(datetime.today(), start) for start, end in ALLOWED_WINDOWS)
+    if duration > max_window:
+        return None, "活动时长超过可排程时间段，请人工处理。"
+    cursor = move_to_next_allowed_start(start_dt)
+    for _ in range(30):
+        if is_within_allowed_windows(cursor, duration):
+            return cursor, ""
+        cursor = move_to_next_allowed_start(cursor + timedelta(minutes=1))
+    return None, "活动时长超过可排程时间段，请人工处理。"
+
+
+def iter_candidate_slots(meet, duration, weather_records):
+    for record in weather_records:
+        base_dt = record.forecast_time.replace(second=0, microsecond=0)
+        slot_dt, _ = find_next_allowed_slot(base_dt, duration)
+        if not slot_dt:
+            continue
+        yield record, slot_dt, calculate_sport_score(record, meet.sport_event), risk_level(record)
 
 
 def time_overlap(start1, end1, start2, end2):
@@ -94,18 +148,20 @@ def venue_has_conflict(venue, scheduled_date, start_time, end_time, meet=None):
     return any(time_overlap(s.scheduled_start_time, s.scheduled_end_time, start_time, end_time) for s in schedules)
 
 
-def choose_best_weather_slot(meet):
+def choose_best_weather_slot(meet, duration):
     now = timezone.now()
     records = list(WeatherRecord.objects.filter(campus=meet.campus, forecast_time__gte=now).order_by("forecast_time")[:72])
     if not records:
-        return None, 0, "未知", "未来72小时缺少天气数据，已回退到活动原计划时间。"
+        return None, 0, "未知", "未来72小时缺少天气数据，将在合法时间窗口内回退排程。", None
 
-    candidates = [(record, calculate_sport_score(record, meet.sport_event), risk_level(record)) for record in records]
-    non_high = [item for item in candidates if item[2] != "高"]
+    candidates = list(iter_candidate_slots(meet, duration, records))
+    if not candidates:
+        return None, 0, "未知", "天气记录未命中合法时间窗口，将在合法时间窗口内回退排程。", None
+    non_high = [item for item in candidates if item[3] != "高"]
     pool = non_high if non_high else candidates
     risk_warning = "" if non_high else "天气风险较高，建议人工复核或调整。"
-    best_record, best_score, best_risk = sorted(pool, key=lambda item: (-item[1], item[0].forecast_time))[0]
-    return best_record, best_score, best_risk, risk_warning
+    best_record, slot_dt, best_score, best_risk = sorted(pool, key=lambda item: (-item[2], item[1]))[0]
+    return best_record, best_score, best_risk, risk_warning, slot_dt
 
 
 def choose_best_venue(meet, scheduled_date, start_time, end_time):
@@ -403,7 +459,11 @@ def meet_create(request):
         return redirect("dashboard")
     form = MeetForm(request.POST or None)
     if form.is_valid():
-        form.save()
+        meet = form.save(commit=False)
+        if meet.planned_date and meet.planned_start_time and not meet.planned_end_time:
+            start_dt = datetime.combine(meet.planned_date, meet.planned_start_time)
+            meet.planned_end_time = (start_dt + timedelta(minutes=meet.activity_duration_minutes)).time().replace(second=0, microsecond=0)
+        meet.save()
         messages.success(request, "活动创建成功")
         return redirect("meet_list")
     return render(request, "core/meet_form.html", {"form": form, "title": "新增活动"})
@@ -702,16 +762,44 @@ def generate_schedule(request, meet_id):
 
     meet = get_object_or_404(Meet, id=meet_id)
     duration = get_activity_duration(meet)
-    best_record, best_score, weather_risk, risk_warning = choose_best_weather_slot(meet)
-
-    if best_record:
-        scheduled_date = best_record.forecast_time.date()
-        scheduled_start_time = best_record.forecast_time.time().replace(second=0, microsecond=0)
+    user_planned = bool(meet.planned_date and meet.planned_start_time)
+    best_record = None
+    best_score = 0
+    weather_risk = "未知"
+    risk_warning = ""
+    adjustment_reason = ""
+    if user_planned:
+        planned_dt = datetime.combine(meet.planned_date, meet.planned_start_time).replace(second=0, microsecond=0)
+        start_dt, slot_note = find_next_allowed_slot(planned_dt, duration)
+        if not start_dt:
+            messages.error(request, "活动时长超过可排程时间段，请人工处理。")
+            return redirect("schedule_list")
+        if start_dt != planned_dt:
+            adjustment_reason = f"原计划起始时间不在可排程窗口或无法容纳完整时长，已顺延至 {start_dt:%Y-%m-%d %H:%M}。"
+        weather_records = list(WeatherRecord.objects.filter(campus=meet.campus, forecast_time__gte=start_dt).order_by("forecast_time")[:72])
+        if weather_records:
+            candidates = [item for item in iter_candidate_slots(meet, duration, weather_records) if item[1] >= start_dt]
+            if candidates:
+                non_high = [item for item in candidates if item[3] != "高"]
+                pool = non_high if non_high else candidates
+                best_record, start_dt, best_score, weather_risk = sorted(pool, key=lambda item: (-item[2], item[1]))[0]
+                risk_warning = "" if non_high else "天气风险较高，建议人工复核或调整。"
+        scheduled_date = start_dt.date()
+        scheduled_start_time = start_dt.time().replace(second=0, microsecond=0)
     else:
-        scheduled_date = meet.planned_date
-        scheduled_start_time = meet.planned_start_time.replace(second=0, microsecond=0)
+        best_record, best_score, weather_risk, risk_warning, slot_dt = choose_best_weather_slot(meet, duration)
+        if slot_dt:
+            start_dt = slot_dt
+        else:
+            start_dt, fallback_note = find_next_allowed_slot(timezone.now(), duration)
+            if not start_dt:
+                messages.error(request, "活动时长超过可排程时间段，请人工处理。")
+                return redirect("schedule_list")
+            adjustment_reason = fallback_note
+        scheduled_date = start_dt.date()
+        scheduled_start_time = start_dt.time().replace(second=0, microsecond=0)
 
-    start_dt = datetime.combine(scheduled_date, scheduled_start_time)
+    start_dt = datetime.combine(scheduled_date, scheduled_start_time).replace(second=0, microsecond=0)
     scheduled_end_time = (start_dt + duration).time().replace(second=0, microsecond=0)
     chosen_venue, venue_note = choose_best_venue(meet, scheduled_date, scheduled_start_time, scheduled_end_time)
 
@@ -720,12 +808,15 @@ def generate_schedule(request, meet_id):
         weather_summary = f"{weather_text(best_record.weather_code)}，温度 {best_record.temperature}℃，降水 {best_record.precipitation}mm，风速 {best_record.wind_speed}m/s"
 
     notes = "\n".join([
-        f"原计划时间：{meet.planned_date} {meet.planned_start_time.strftime('%H:%M')}-{meet.planned_end_time.strftime('%H:%M')}。",
+        f"活动总时长：{int(duration.total_seconds() // 60)} 分钟。",
+        f"是否使用原计划时间：{'是' if user_planned else '否'}。",
+        f"原计划时间：{meet.planned_date} {meet.planned_start_time.strftime('%H:%M') if meet.planned_start_time else '-'}-{meet.planned_end_time.strftime('%H:%M') if meet.planned_end_time else '-'}。" if meet.planned_date else "原计划时间：未指定，由系统自动排程。",
         f"系统推荐时间：{scheduled_date} {scheduled_start_time.strftime('%H:%M')}-{scheduled_end_time.strftime('%H:%M')}。",
         f"天气情况：{weather_summary}。",
         f"运动适宜度评分：{best_score}（采用与智能建议一致的 calculate_sport_score 评分规则）。",
         "时间选择原因：优先规避高风险天气，在低风险候选中选择评分最高且时间更早的时段。",
         f"场地选择原因：{venue_note}",
+        adjustment_reason,
         risk_warning,
     ]).strip()
 
