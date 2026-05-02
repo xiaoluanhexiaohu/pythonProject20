@@ -6,7 +6,7 @@
 <div class="card">
     <h3>校区列表</h3>
     <table>
-        <tr><th>ID</th><th>名称</th><th>位置</th><th>经纬度</th><th>描述</th></tr>
+        <tr><th>ID</th><th>名称</th><th>位置</th><th>经纬度</th><th>描述</th><th>操作</th></tr>
         {% for item in items %}
         <tr>
             <td>{{ item.id }}</td>
@@ -14,9 +14,17 @@
             <td>{{ item.location }}</td>
             <td>{{ item.latitude }}, {{ item.longitude }}</td>
             <td>{{ item.description }}</td>
+            <td>
+                {% if request.user.profile.role == "admin" or request.user.is_superuser %}
+                <a class="btn" href="/campuses/{{ item.id }}/edit/">编辑</a>
+                <form method="post" action="/campuses/{{ item.id }}/delete/" style="display:inline;">{% csrf_token %}
+                    <button class="btn" style="background:#dc3545;" onclick="return confirm('确认删除该校区吗？')">删除</button>
+                </form>
+                {% else %}-{% endif %}
+            </td>
         </tr>
         {% empty %}
-        <tr><td colspan="5">暂无数据</td></tr>
+        <tr><td colspan="6">暂无数据</td></tr>
         {% endfor %}
     </table>
 </div>

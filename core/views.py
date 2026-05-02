@@ -5,11 +5,13 @@ from django.contrib import messages
 from django.contrib.auth import get_user_model, login, logout
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.forms import AuthenticationForm
-from django.db.models import Case, Count, IntegerField, Q, Value, When
+from django.db import IntegrityError, transaction
+from django.db.models import Case, Count, Exists, IntegerField, OuterRef, Q, Value, When
 from django.http import HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
 from django.views.decorators.http import require_GET
+from django.views.decorators.http import require_POST
 
 from .forms import (
     CampusForm,
@@ -299,6 +301,29 @@ def campus_create(request):
     return render(request, "core/campus_form.html", {"form": form, "title": "新增校区"})
 
 
+@role_required(ROLE_ADMIN)
+def campus_edit(request, campus_id):
+    item = get_object_or_404(Campus, id=campus_id)
+    form = CampusForm(request.POST or None, instance=item)
+    if request.method == "POST" and form.is_valid():
+        form.save()
+        messages.success(request, "校区编辑成功")
+        return redirect("campus_list")
+    return render(request, "core/campus_form.html", {"form": form, "title": "编辑校区"})
+
+
+@require_POST
+@role_required(ROLE_ADMIN)
+def campus_delete(request, campus_id):
+    item = get_object_or_404(Campus, id=campus_id)
+    try:
+        item.delete()
+        messages.success(request, "校区删除成功")
+    except IntegrityError:
+        messages.error(request, "该校区存在关联数据，暂时无法删除。")
+    return redirect("campus_list")
+
+
 @login_required
 def venue_list(request):
     return render(request, "core/venue_list.html", {"items": Venue.objects.select_related("campus").all()})
@@ -312,6 +337,29 @@ def venue_create(request):
         messages.success(request, "场地创建成功")
         return redirect("venue_list")
     return render(request, "core/venue_form.html", {"form": form, "title": "新增场地"})
+
+
+@role_required(ROLE_ADMIN)
+def venue_edit(request, venue_id):
+    item = get_object_or_404(Venue, id=venue_id)
+    form = VenueForm(request.POST or None, instance=item)
+    if request.method == "POST" and form.is_valid():
+        form.save()
+        messages.success(request, "场地编辑成功")
+        return redirect("venue_list")
+    return render(request, "core/venue_form.html", {"form": form, "title": "编辑场地"})
+
+
+@require_POST
+@role_required(ROLE_ADMIN)
+def venue_delete(request, venue_id):
+    item = get_object_or_404(Venue, id=venue_id)
+    if item.meets.exists() or FinalSchedule.objects.filter(venue=item).exists():
+        messages.error(request, "该场地已关联活动或排程，不能删除。")
+        return redirect("venue_list")
+    item.delete()
+    messages.success(request, "场地删除成功")
+    return redirect("venue_list")
 
 
 @login_required
@@ -329,18 +377,47 @@ def event_create(request):
     return render(request, "core/event_form.html", {"form": form, "title": "新增运动项目"})
 
 
+@role_required(ROLE_ADMIN, ROLE_TEACHER)
+def event_edit(request, event_id):
+    if get_user_role(request.user) == ROLE_TEACHER and not has_feature_perm(request.user, "can_manage_meets"):
+        messages.error(request, "您没有该功能权限")
+        return redirect("dashboard")
+    item = get_object_or_404(SportEvent, id=event_id)
+    form = SportEventForm(request.POST or None, instance=item)
+    if request.method == "POST" and form.is_valid():
+        form.save()
+        messages.success(request, "运动项目编辑成功")
+        return redirect("event_list")
+    return render(request, "core/event_form.html", {"form": form, "title": "编辑运动项目"})
+
+
+@require_POST
+@role_required(ROLE_ADMIN, ROLE_TEACHER)
+def event_delete(request, event_id):
+    if get_user_role(request.user) == ROLE_TEACHER and not has_feature_perm(request.user, "can_manage_meets"):
+        messages.error(request, "您没有该功能权限")
+        return redirect("dashboard")
+    item = get_object_or_404(SportEvent, id=event_id)
+    if item.meets.exists():
+        messages.error(request, "该运动项目已关联活动，不能删除。")
+    else:
+        item.delete()
+        messages.success(request, "运动项目删除成功")
+    return redirect("event_list")
+
+
 @login_required
 def meet_list(request):
     current_role = get_user_role(request.user)
-    items = Meet.objects.select_related("campus", "venue", "sport_event").all()
+    items = Meet.objects.select_related("campus", "venue", "sport_event").annotate(
+        approved_count=Count("registrations", filter=Q(registrations__status="approved")),
+        pending_count=Count("registrations", filter=Q(registrations__status="pending")),
+    )
     registration_map = {}
     if current_role == ROLE_STUDENT:
         registration_map = {obj.meet_id: obj for obj in ActivityRegistration.objects.filter(student=request.user)}
 
     for item in items:
-        approved_count, pending_count = get_meet_registration_counts(item)
-        item.approved_count = approved_count
-        item.pending_count = pending_count
         item.capacity_limit = get_meet_capacity_limit(item)
         item.is_full = item.approved_count >= item.capacity_limit
         current_registration = registration_map.get(item.id)
@@ -469,6 +546,35 @@ def meet_create(request):
     return render(request, "core/meet_form.html", {"form": form, "title": "新增活动"})
 
 
+@role_required(ROLE_ADMIN, ROLE_TEACHER)
+def meet_edit(request, meet_id):
+    if get_user_role(request.user) == ROLE_TEACHER and not has_feature_perm(request.user, "can_manage_meets"):
+        messages.error(request, "您没有该功能权限")
+        return redirect("dashboard")
+    meet = get_object_or_404(Meet, id=meet_id)
+    form = MeetForm(request.POST or None, instance=meet)
+    if request.method == "POST" and form.is_valid():
+        form.save()
+        messages.success(request, "活动编辑成功")
+        return redirect("meet_list")
+    return render(request, "core/meet_form.html", {"form": form, "title": "编辑活动"})
+
+
+@require_POST
+@role_required(ROLE_ADMIN, ROLE_TEACHER)
+def meet_delete(request, meet_id):
+    if get_user_role(request.user) == ROLE_TEACHER and not has_feature_perm(request.user, "can_manage_meets"):
+        messages.error(request, "您没有该功能权限")
+        return redirect("dashboard")
+    meet = get_object_or_404(Meet, id=meet_id)
+    if meet.registrations.exists() or hasattr(meet, "final_schedule") or meet.notifications.exists():
+        messages.error(request, "该活动存在报名/排程/通知关联数据，暂不允许删除。")
+    else:
+        meet.delete()
+        messages.success(request, "活动删除成功")
+    return redirect("meet_list")
+
+
 @login_required
 def registration_manage(request):
     role = get_user_role(request.user)
@@ -507,16 +613,17 @@ def approve_registration(request, registration_id):
         messages.error(request, "仅待审核记录可审批")
         return redirect("registration_manage")
 
-    approved_count, _ = get_meet_registration_counts(registration.meet)
-    if approved_count >= get_meet_capacity_limit(registration.meet):
-        messages.error(request, "该活动名额已满")
-        return redirect("registration_manage")
-
-    registration.status = "approved"
-    registration.review_reason = registration.review_reason or "报名已通过"
-    registration.reviewed_by = request.user
-    registration.reviewed_at = timezone.now()
-    registration.save(update_fields=["status", "review_reason", "reviewed_by", "reviewed_at", "updated_at"])
+    with transaction.atomic():
+        registration = ActivityRegistration.objects.select_for_update().select_related("meet", "student").get(id=registration_id)
+        approved_count = ActivityRegistration.objects.filter(meet=registration.meet, status="approved").count()
+        if approved_count >= get_meet_capacity_limit(registration.meet):
+            messages.error(request, "该活动名额已满")
+            return redirect("registration_manage")
+        registration.status = "approved"
+        registration.review_reason = registration.review_reason or "报名已通过"
+        registration.reviewed_by = request.user
+        registration.reviewed_at = timezone.now()
+        registration.save(update_fields=["status", "review_reason", "reviewed_by", "reviewed_at", "updated_at"])
     create_notification(
         title="活动报名成功",
         content=f"你报名的《{registration.meet.title}》已审核通过。",

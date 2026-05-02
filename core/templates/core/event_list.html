@@ -6,7 +6,7 @@
 <div class="card">
     <h3>运动项目列表</h3>
     <table>
-        <tr><th>项目</th><th>温度范围</th><th>避雨</th><th>最大风速</th><th>强度</th><th>热量/小时</th></tr>
+        <tr><th>项目</th><th>温度范围</th><th>避雨</th><th>最大风速</th><th>强度</th><th>热量/小时</th><th>操作</th></tr>
         {% for item in items %}
         <tr>
             <td>{{ item.name }}</td>
@@ -15,9 +15,17 @@
             <td>{{ item.avoid_wind_level }}</td>
             <td>{{ item.get_intensity_display }}</td>
             <td>{{ item.calories_per_hour }}</td>
+            <td>
+                {% if request.user.profile.role == "admin" or request.user.profile.role == "teacher" or request.user.is_superuser %}
+                <a class="btn" href="/events/{{ item.id }}/edit/">编辑</a>
+                <form method="post" action="/events/{{ item.id }}/delete/" style="display:inline;">{% csrf_token %}
+                    <button class="btn" style="background:#dc3545;" onclick="return confirm('确认删除该项目吗？')">删除</button>
+                </form>
+                {% else %}-{% endif %}
+            </td>
         </tr>
         {% empty %}
-        <tr><td colspan="6">暂无数据</td></tr>
+        <tr><td colspan="7">暂无数据</td></tr>
         {% endfor %}
     </table>
 </div>

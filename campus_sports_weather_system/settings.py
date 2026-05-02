@@ -1,10 +1,11 @@
 from pathlib import Path
+import os
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-SECRET_KEY = "django-insecure-campus-sports-weather-upgraded-demo-key"
-DEBUG = True
-ALLOWED_HOSTS = ["*"]
+SECRET_KEY = os.getenv("DJANGO_SECRET_KEY", "django-insecure-campus-sports-weather-upgraded-demo-key")
+DEBUG = os.getenv("DJANGO_DEBUG", "true").lower() in ("1", "true", "yes", "on")
+ALLOWED_HOSTS = [h.strip() for h in os.getenv("DJANGO_ALLOWED_HOSTS", "*").split(",") if h.strip()]
 
 INSTALLED_APPS = [
     "django.contrib.admin",
@@ -54,7 +55,12 @@ DATABASES = {
     }
 }
 
-AUTH_PASSWORD_VALIDATORS = []
+AUTH_PASSWORD_VALIDATORS = [
+    {"NAME": "django.contrib.auth.password_validation.UserAttributeSimilarityValidator"},
+    {"NAME": "django.contrib.auth.password_validation.MinimumLengthValidator"},
+    {"NAME": "django.contrib.auth.password_validation.CommonPasswordValidator"},
+    {"NAME": "django.contrib.auth.password_validation.NumericPasswordValidator"},
+]
 
 LANGUAGE_CODE = "zh-hans"
 TIME_ZONE = "Asia/Shanghai"
@@ -74,6 +80,6 @@ OPENMETEO_BASE_URL = "https://api.open-meteo.com/v1/forecast"
 DEFAULT_LATITUDE = 31.2304
 DEFAULT_LONGITUDE = 121.4737
 QWEATHER_BASE_URL = "https://devapi.qweather.com"
-QWEATHER_API_KEY = ""
+QWEATHER_API_KEY = os.getenv("QWEATHER_API_KEY", "")
 AMAP_BASE_URL = "https://restapi.amap.com"
-AMAP_API_KEY = ""
+AMAP_API_KEY = os.getenv("AMAP_API_KEY", "")
