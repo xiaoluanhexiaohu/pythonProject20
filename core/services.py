@@ -1,12 +1,130 @@
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Dict, List, Tuple
 
 import requests
 from django.conf import settings
+from django.db import transaction
 from django.utils import timezone
 
 from .models import Campus, Notification, SportEvent, Suggestion, WeatherAlert, WeatherRecord
-from .utils import calculate_sport_score
+from .utils import calculate_sport_score, weather_text
+
+
+ALERT_TARGET_ROLES = ["admin", "teacher", "student"]
+
+
+def _weather_alert_message(campus, record, impact, suggestion):
+    local_time = timezone.localtime(record.forecast_time)
+    return (
+        f"校区：{campus.name}\n"
+        f"预警时间：{local_time:%Y-%m-%d %H:%M}\n"
+        f"天气情况：{weather_text(record.weather_code)}\n"
+        f"温度：{record.temperature}℃\n"
+        f"降水：{record.precipitation}mm\n"
+        f"风速：{record.wind_speed}m/s\n"
+        f"对体育活动的影响：{impact}\n"
+        f"处理建议：{suggestion}"
+    )
+
+
+def _alert_specs_for_record(record):
+    suggestion = "建议暂停室外活动，优先改为室内场地或人工复核排程。"
+    specs = []
+    if record.weather_code in [95, 96, 99]:
+        specs.append(("danger", "雷暴天气危险预警", "雷暴天气对室外体育活动存在触电、强阵风和短时强降水风险。", suggestion))
+    if record.precipitation >= 10:
+        specs.append(("danger", "强降水危险预警", "强降水可能造成场地湿滑、视线受限和活动中断风险。", suggestion))
+    elif record.precipitation >= 2:
+        specs.append(("warning", "降水天气预警", "降水可能影响室外场地安全和运动表现。", "建议优先安排室内活动，室外活动需加强防滑和人工复核。"))
+    if record.wind_speed >= 10.8:
+        specs.append(("danger", "大风危险预警", "大风可能影响器材稳定、球类轨迹和人员安全。", suggestion))
+    elif record.wind_speed >= 8:
+        specs.append(("warning", "大风天气预警", "大风可能影响室外训练和比赛安全。", "建议减少室外高空器械和球类活动，必要时改至室内场地。"))
+    if record.temperature >= 35:
+        specs.append(("danger", "高温危险预警", "高温天气可能导致中暑、脱水和运动能力下降。", suggestion))
+    elif record.temperature >= 30:
+        specs.append(("warning", "高温天气预警", "高温天气可能增加热应激和疲劳风险。", "建议避开高温时段，补充饮水并降低运动强度。"))
+    if record.temperature <= 0:
+        specs.append(("warning", "低温天气预警", "低温天气可能造成肌肉拉伤、冻伤和场地结冰风险。", "建议充分热身，优先使用室内场地并人工复核排程。"))
+    return specs
+
+
+@transaction.atomic
+def refresh_weather_alerts_from_records(campus=None, created_by=None):
+    """Regenerate active weather alerts from existing WeatherRecord rows in the next 72 hours."""
+    now = timezone.now()
+    end_time = now + timedelta(hours=72)
+    campuses = Campus.objects.filter(id=campus.id) if campus else Campus.objects.all()
+    campus_ids = list(campuses.values_list("id", flat=True))
+    if not campus_ids:
+        return {"created": 0, "campuses": 0}
+
+    base_records = WeatherRecord.objects.filter(
+        campus_id__in=campus_ids,
+        forecast_time__gte=now,
+        forecast_time__lte=end_time,
+    ).select_related("campus").order_by("campus_id", "forecast_time")
+    if not base_records.exists():
+        raise ValueError("暂无天气记录，请先刷新天气中心数据。")
+
+    WeatherAlert.objects.filter(campus_id__in=campus_ids, active=True).update(active=False)
+
+    created_alerts = []
+    for campus_obj in Campus.objects.filter(id__in=campus_ids):
+        campus_records = [record for record in base_records if record.campus_id == campus_obj.id]
+        selected_by_type = {}
+        for record in campus_records:
+            for level, title, impact, suggestion in _alert_specs_for_record(record):
+                key = (campus_obj.id, title, level)
+                if key not in selected_by_type:
+                    selected_by_type[key] = (record, level, title, impact, suggestion)
+        if not selected_by_type:
+            message = (
+                f"校区：{campus_obj.name}\n"
+                f"预警时间：{timezone.localtime(now):%Y-%m-%d %H:%M}\n"
+                "天气情况：未来72小时暂无明显高风险天气\n"
+                "温度：无异常\n"
+                "降水：无明显风险\n"
+                "风速：无明显风险\n"
+                "对体育活动的影响：未来72小时暂无明显高风险天气。\n"
+                "处理建议：未来72小时暂无明显高风险天气，系统已完成预警刷新。"
+            )
+            alert = WeatherAlert.objects.create(
+                campus=campus_obj,
+                level="info",
+                title="暂无高风险天气预警",
+                message=message,
+                alert_time=now,
+                active=True,
+            )
+            created_alerts.append(alert)
+            continue
+        for record, level, title, impact, suggestion in selected_by_type.values():
+            alert = WeatherAlert.objects.create(
+                campus=campus_obj,
+                level=level,
+                title=title,
+                message=_weather_alert_message(campus_obj, record, impact, suggestion),
+                alert_time=record.forecast_time,
+                active=True,
+            )
+            created_alerts.append(alert)
+
+    notifications = []
+    for alert in created_alerts:
+        for role in ALERT_TARGET_ROLES:
+            notifications.append(
+                Notification(
+                    title=alert.title,
+                    content=alert.message,
+                    notification_type="weather",
+                    target_role=role,
+                    source_module="weather_alert_refresh",
+                    created_by=created_by,
+                )
+            )
+    Notification.objects.bulk_create(notifications)
+    return {"created": len(created_alerts), "campuses": len(campus_ids)}
 
 
 class WeatherService:
