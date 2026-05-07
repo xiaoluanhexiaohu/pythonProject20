@@ -3,6 +3,7 @@
 <div class="card">
     <h3>天气中心</h3>
     <div class="toolbar">
+        <a class="btn gray" href="{% url 'alert_center' %}">查看天气预警</a>
         {% if request.user.profile.role == "admin" or request.user.profile.role == "teacher" or request.user.is_superuser %}
             <a class="btn" href="/weather/refresh/">刷新全部校区天气</a>
         {% endif %}

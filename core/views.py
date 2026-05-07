@@ -52,7 +52,7 @@ from .permissions import (
     has_feature_perm,
     role_required,
 )
-from .services import WeatherService
+from .services import WeatherService, refresh_weather_alerts_from_records
 from .utils import calculate_sport_score, risk_level, weather_text
 
 ALLOWED_WINDOWS = [
@@ -83,13 +83,39 @@ def create_notification(
     )
 
 
+def normalize_schedule_dt(dt):
+    """Return a datetime normalized to Django's current timezone for scheduling comparisons."""
+    if dt is None:
+        return None
+    dt = dt.replace(second=0, microsecond=0)
+    if timezone.is_naive(dt):
+        return timezone.make_aware(dt, timezone.get_current_timezone())
+    return timezone.localtime(dt).replace(second=0, microsecond=0)
+
+
+def combine_aware(date_value, time_value):
+    """Combine a date and time as an aware datetime in Django's current timezone."""
+    return normalize_schedule_dt(datetime.combine(date_value, time_value))
+
+
+def build_scheduled_times(slot_dt, duration):
+    """Build date/start/end TimeField values from an aware slot datetime and duration."""
+    slot_dt = normalize_schedule_dt(slot_dt)
+    end_dt = slot_dt + duration
+    return (
+        slot_dt.date(),
+        slot_dt.time().replace(second=0, microsecond=0),
+        end_dt.time().replace(second=0, microsecond=0),
+    )
+
+
 def get_activity_duration(meet):
     minutes = getattr(meet, "activity_duration_minutes", None)
     if minutes:
         return timedelta(minutes=minutes)
     if meet.planned_date and meet.planned_start_time and meet.planned_end_time:
-        start_dt = datetime.combine(meet.planned_date, meet.planned_start_time)
-        end_dt = datetime.combine(meet.planned_date, meet.planned_end_time)
+        start_dt = combine_aware(meet.planned_date, meet.planned_start_time)
+        end_dt = combine_aware(meet.planned_date, meet.planned_end_time)
         duration = end_dt - start_dt
         if duration > timedelta(0):
             return duration
@@ -97,46 +123,76 @@ def get_activity_duration(meet):
 
 
 def is_within_allowed_windows(start_dt, duration):
+    start_dt = normalize_schedule_dt(start_dt)
     end_dt = start_dt + duration
     for window_start, window_end in ALLOWED_WINDOWS:
-        ws = datetime.combine(start_dt.date(), window_start)
-        we = datetime.combine(start_dt.date(), window_end)
+        ws = combine_aware(start_dt.date(), window_start)
+        we = combine_aware(start_dt.date(), window_end)
         if start_dt >= ws and end_dt <= we:
             return True
     return False
 
 
 def move_to_next_allowed_start(dt):
-    dt = dt.replace(second=0, microsecond=0)
+    dt = normalize_schedule_dt(dt)
     for window_start, window_end in ALLOWED_WINDOWS:
-        ws = datetime.combine(dt.date(), window_start)
-        we = datetime.combine(dt.date(), window_end)
+        ws = combine_aware(dt.date(), window_start)
+        we = combine_aware(dt.date(), window_end)
         if dt < ws:
             return ws
         if ws <= dt < we:
             return dt
-    return datetime.combine(dt.date() + timedelta(days=1), ALLOWED_WINDOWS[0][0])
+    return combine_aware(dt.date() + timedelta(days=1), ALLOWED_WINDOWS[0][0])
 
 
 def find_next_allowed_slot(start_dt, duration):
-    max_window = max(datetime.combine(datetime.today(), end) - datetime.combine(datetime.today(), start) for start, end in ALLOWED_WINDOWS)
+    max_window = max(
+        combine_aware(timezone.localdate(), end) - combine_aware(timezone.localdate(), start)
+        for start, end in ALLOWED_WINDOWS
+    )
     if duration > max_window:
         return None, "活动时长超过可排程时间段，请人工处理。"
     cursor = move_to_next_allowed_start(start_dt)
-    for _ in range(30):
+    for _ in range(30 * 24 * 60):
         if is_within_allowed_windows(cursor, duration):
             return cursor, ""
         cursor = move_to_next_allowed_start(cursor + timedelta(minutes=1))
     return None, "活动时长超过可排程时间段，请人工处理。"
 
 
-def iter_candidate_slots(meet, duration, weather_records):
-    for record in weather_records:
-        base_dt = record.forecast_time.replace(second=0, microsecond=0)
-        slot_dt, _ = find_next_allowed_slot(base_dt, duration)
-        if not slot_dt:
+def _nearest_weather_record(slot_dt, weather_records):
+    if not weather_records:
+        return None
+    slot_dt = normalize_schedule_dt(slot_dt)
+    return min(weather_records, key=lambda record: abs(normalize_schedule_dt(record.forecast_time) - slot_dt))
+
+
+def _iter_allowed_grid_starts(start_dt, duration, horizon_hours=72):
+    cursor = move_to_next_allowed_start(start_dt)
+    horizon_end = normalize_schedule_dt(start_dt) + timedelta(hours=horizon_hours)
+    step = timedelta(hours=1)
+    while cursor <= horizon_end:
+        for window_start, window_end in ALLOWED_WINDOWS:
+            window_cursor = max(cursor, combine_aware(cursor.date(), window_start))
+            window_end_dt = combine_aware(cursor.date(), window_end)
+            while window_cursor + duration <= window_end_dt and window_cursor <= horizon_end:
+                yield window_cursor
+                window_cursor += step
+        cursor = combine_aware(cursor.date() + timedelta(days=1), ALLOWED_WINDOWS[0][0])
+
+
+def iter_candidate_slots(meet, duration, weather_records, start_dt=None):
+    start_dt = normalize_schedule_dt(start_dt or timezone.now())
+    seen = set()
+    for slot_dt in _iter_allowed_grid_starts(start_dt, duration):
+        key = slot_dt.replace(second=0, microsecond=0)
+        if key in seen:
             continue
-        yield record, slot_dt, calculate_sport_score(record, meet.sport_event), risk_level(record)
+        seen.add(key)
+        record = _nearest_weather_record(slot_dt, weather_records)
+        score = calculate_sport_score(record, meet.sport_event) if record else 0
+        risk = risk_level(record) if record else "未知"
+        yield record, slot_dt, score, risk
 
 
 def time_overlap(start1, end1, start2, end2):
@@ -150,20 +206,11 @@ def venue_has_conflict(venue, scheduled_date, start_time, end_time, meet=None):
     return any(time_overlap(s.scheduled_start_time, s.scheduled_end_time, start_time, end_time) for s in schedules)
 
 
-def choose_best_weather_slot(meet, duration):
-    now = timezone.now()
-    records = list(WeatherRecord.objects.filter(campus=meet.campus, forecast_time__gte=now).order_by("forecast_time")[:72])
-    if not records:
-        return None, 0, "未知", "未来72小时缺少天气数据，将在合法时间窗口内回退排程。", None
-
-    candidates = list(iter_candidate_slots(meet, duration, records))
-    if not candidates:
-        return None, 0, "未知", "天气记录未命中合法时间窗口，将在合法时间窗口内回退排程。", None
-    non_high = [item for item in candidates if item[3] != "高"]
-    pool = non_high if non_high else candidates
-    risk_warning = "" if non_high else "天气风险较高，建议人工复核或调整。"
-    best_record, slot_dt, best_score, best_risk = sorted(pool, key=lambda item: (-item[2], item[1]))[0]
-    return best_record, best_score, best_risk, risk_warning, slot_dt
+def campus_time_has_conflict(campus, scheduled_date, start_time, end_time, meet=None):
+    schedules = FinalSchedule.objects.filter(campus=campus, scheduled_date=scheduled_date)
+    if meet:
+        schedules = schedules.exclude(meet=meet)
+    return any(time_overlap(s.scheduled_start_time, s.scheduled_end_time, start_time, end_time) for s in schedules)
 
 
 def choose_best_venue(meet, scheduled_date, start_time, end_time):
@@ -177,16 +224,83 @@ def choose_best_venue(meet, scheduled_date, start_time, end_time):
             and not venue_has_conflict(preferred, scheduled_date, start_time, end_time, meet=meet)
         )
         if venue_valid:
-            return preferred, "沿用活动原指定场地（满足校区、状态、容量与时间要求）。"
-        fallback_note = "原指定场地不满足条件，系统已自动选择候选场地。"
+            return preferred, "沿用活动原指定场地（满足同校区、可用状态、容量与时间不冲突要求）。"
+        fallback_note = "原指定场地不满足同校区、可用状态、容量或时间不冲突条件，系统已改选候选场地。"
 
-    candidates = Venue.objects.filter(campus=meet.campus, status="available", capacity__gte=meet.expected_people).order_by("-indoor", "-capacity")
+    candidates = Venue.objects.filter(
+        campus=meet.campus,
+        status="available",
+        capacity__gte=meet.expected_people,
+    ).order_by("-indoor", "-capacity", "name")
     for venue in candidates:
         if not venue_has_conflict(venue, scheduled_date, start_time, end_time, meet=meet):
-            return venue, f"{fallback_note} 已选择同校区可用场地（室内优先、容量优先）。" if fallback_note else "系统自动匹配同校区可用场地（室内优先、容量优先）。"
+            return venue, (
+                f"{fallback_note} 已选择同校区可用场地：{venue.name}（室内优先、容量大的优先，且时间不冲突）。"
+                if fallback_note
+                else f"系统自动匹配同校区可用场地：{venue.name}（室内优先、容量大的优先，且时间不冲突）。"
+            )
 
     return None, "未找到满足容量或时间条件的可用场地，请人工处理。"
 
+
+def _sort_candidates(candidates):
+    return sorted(candidates, key=lambda item: (-item[2], item[1]))
+
+
+def choose_schedule_slot(meet, duration, start_dt):
+    records = list(
+        WeatherRecord.objects.filter(
+            campus=meet.campus,
+            forecast_time__gte=normalize_schedule_dt(start_dt) - timedelta(hours=1),
+            forecast_time__lte=normalize_schedule_dt(start_dt) + timedelta(hours=72),
+        ).order_by("forecast_time")
+    )
+    if not records:
+        records = list(WeatherRecord.objects.filter(campus=meet.campus, forecast_time__gte=timezone.now()).order_by("forecast_time")[:72])
+    candidates = list(iter_candidate_slots(meet, duration, records, start_dt=start_dt))
+    if not candidates:
+        return None, None, 0, "未知", "天气记录未命中合法时间窗口，将在合法时间窗口内回退排程。", ""
+
+    low_risk_candidates = [item for item in candidates if item[3] != "高"]
+    pools = [(low_risk_candidates, "优先规避高风险天气，在低风险候选中按天气评分从高到低、同分按时间更早排序，并同时检查同校区时间冲突和场地可用性。", "")]
+    if low_risk_candidates:
+        pools.append((candidates, "低风险候选时段无可用时间或场地，系统已扩大到全部天气候选。", "低风险候选时段无可用时间或场地，系统已扩大到全部天气候选。"))
+    else:
+        pools = [(candidates, "未找到低风险天气候选，系统已在全部天气候选中按评分和时间排序，天气风险较高，建议人工复核或调整。", "天气风险较高，建议人工复核或调整。")]
+
+    first_no_venue = None
+    first_with_venue_but_campus_conflict = None
+    for pool, reason, warning in pools:
+        for record, slot_dt, score, risk in _sort_candidates(pool):
+            scheduled_date, start_time, end_time = build_scheduled_times(slot_dt, duration)
+            has_campus_conflict = campus_time_has_conflict(meet.campus, scheduled_date, start_time, end_time, meet=meet)
+            venue, venue_note = choose_best_venue(meet, scheduled_date, start_time, end_time)
+            if not has_campus_conflict and venue:
+                return record, slot_dt, score, risk, reason, warning
+            if not has_campus_conflict and first_no_venue is None:
+                first_no_venue = (record, slot_dt, score, risk, reason, warning)
+            if venue and first_with_venue_but_campus_conflict is None:
+                first_with_venue_but_campus_conflict = (record, slot_dt, score, risk, reason, warning)
+
+    if first_no_venue:
+        record, slot_dt, score, risk, reason, warning = first_no_venue
+        manual_warning = "未找到满足容量或时间条件的可用场地，请人工处理。"
+        return record, slot_dt, score, risk, f"{reason}；{manual_warning}", "；".join(filter(None, [warning, manual_warning]))
+    if first_with_venue_but_campus_conflict:
+        record, slot_dt, score, risk, reason, warning = first_with_venue_but_campus_conflict
+        overlap_warning = "候选时段均存在同校区时间重叠，请人工复核。"
+        return record, slot_dt, score, risk, f"{reason}；{overlap_warning}", "；".join(filter(None, [warning, overlap_warning]))
+
+    record, slot_dt, score, risk = _sort_candidates(candidates)[0]
+    fallback_warning = "候选时段均存在同校区时间重叠，请人工复核；未找到满足容量或时间条件的可用场地，请人工处理。"
+    return record, slot_dt, score, risk, fallback_warning, fallback_warning
+
+
+def choose_best_weather_slot(meet, duration):
+    record, slot_dt, score, risk, reason, warning = choose_schedule_slot(meet, duration, timezone.now())
+    if not slot_dt:
+        return None, 0, "未知", reason, None
+    return record, score, risk, warning or reason, slot_dt
 
 def get_meet_capacity_limit(meet):
     capacity_limit = meet.expected_people
@@ -823,6 +937,26 @@ def alert_center(request):
     return render(request, "core/alert_center.html", {"items": WeatherAlert.objects.select_related("campus").filter(active=True)})
 
 
+@require_POST
+@login_required
+def refresh_weather_alerts(request):
+    if get_user_role(request.user) == ROLE_STUDENT and not has_feature_perm(request.user, "can_view_alerts"):
+        messages.error(request, "您没有该功能权限")
+        return redirect("dashboard")
+
+    campus = None
+    campus_id = request.POST.get("campus_id")
+    if campus_id:
+        campus = get_object_or_404(Campus, id=campus_id)
+
+    try:
+        result = refresh_weather_alerts_from_records(campus=campus, created_by=request.user)
+        messages.success(request, f"天气预警刷新成功，本次生成 {result['created']} 条预警")
+    except Exception as exc:
+        messages.error(request, str(exc))
+    return redirect("alert_center")
+
+
 @role_required(ROLE_ADMIN, ROLE_TEACHER)
 def generate_suggestions(request):
     if get_user_role(request.user) == ROLE_TEACHER and not has_feature_perm(request.user, "can_generate_suggestions"):
@@ -870,62 +1004,75 @@ def generate_schedule(request, meet_id):
     meet = get_object_or_404(Meet, id=meet_id)
     duration = get_activity_duration(meet)
     user_planned = bool(meet.planned_date and meet.planned_start_time)
-    best_record = None
-    best_score = 0
-    weather_risk = "未知"
-    risk_warning = ""
-    adjustment_reason = ""
+    used_original_plan = False
+    original_plan_text = "未指定，由系统自动排程"
+    manual_review_notes = []
+
     if user_planned:
-        planned_dt = datetime.combine(meet.planned_date, meet.planned_start_time).replace(second=0, microsecond=0)
+        planned_dt = combine_aware(meet.planned_date, meet.planned_start_time)
+        original_end = meet.planned_end_time.strftime("%H:%M") if meet.planned_end_time else "-"
+        original_plan_text = f"{meet.planned_date} {meet.planned_start_time.strftime('%H:%M')}-{original_end}"
         start_dt, slot_note = find_next_allowed_slot(planned_dt, duration)
         if not start_dt:
             messages.error(request, "活动时长超过可排程时间段，请人工处理。")
             return redirect("schedule_list")
+        planned_adjustment_note = ""
         if start_dt != planned_dt:
-            adjustment_reason = f"原计划起始时间不在可排程窗口或无法容纳完整时长，已顺延至 {start_dt:%Y-%m-%d %H:%M}。"
-        weather_records = list(WeatherRecord.objects.filter(campus=meet.campus, forecast_time__gte=start_dt).order_by("forecast_time")[:72])
-        if weather_records:
-            candidates = [item for item in iter_candidate_slots(meet, duration, weather_records) if item[1] >= start_dt]
-            if candidates:
-                non_high = [item for item in candidates if item[3] != "高"]
-                pool = non_high if non_high else candidates
-                best_record, start_dt, best_score, weather_risk = sorted(pool, key=lambda item: (-item[2], item[1]))[0]
-                risk_warning = "" if non_high else "天气风险较高，建议人工复核或调整。"
-        scheduled_date = start_dt.date()
-        scheduled_start_time = start_dt.time().replace(second=0, microsecond=0)
+            planned_adjustment_note = f"原计划起始时间不在合法排程窗口或无法容纳完整时长，已从 {planned_dt:%Y-%m-%d %H:%M} 顺延检索。"
     else:
-        best_record, best_score, weather_risk, risk_warning, slot_dt = choose_best_weather_slot(meet, duration)
-        if slot_dt:
-            start_dt = slot_dt
-        else:
-            start_dt, fallback_note = find_next_allowed_slot(timezone.now(), duration)
-            if not start_dt:
-                messages.error(request, "活动时长超过可排程时间段，请人工处理。")
-                return redirect("schedule_list")
-            adjustment_reason = fallback_note
-        scheduled_date = start_dt.date()
-        scheduled_start_time = start_dt.time().replace(second=0, microsecond=0)
+        start_dt, slot_note = find_next_allowed_slot(timezone.now(), duration)
+        if not start_dt:
+            messages.error(request, "活动时长超过可排程时间段，请人工处理。")
+            return redirect("schedule_list")
+        planned_dt = None
+        planned_adjustment_note = "活动未指定原计划时间，系统从未来天气候选中自动选最佳时段。"
 
-    start_dt = datetime.combine(scheduled_date, scheduled_start_time).replace(second=0, microsecond=0)
-    scheduled_end_time = (start_dt + duration).time().replace(second=0, microsecond=0)
+    best_record, chosen_dt, best_score, weather_risk, time_reason, risk_warning = choose_schedule_slot(meet, duration, start_dt)
+    if not chosen_dt:
+        chosen_dt = start_dt
+        best_record = None
+        best_score = 0
+        weather_risk = "未知"
+        time_reason = time_reason or slot_note or "未来72小时缺少天气候选，将在合法时间窗口内回退排程。"
+        risk_warning = "未来72小时缺少天气候选，请人工复核。"
+
+    scheduled_date, scheduled_start_time, scheduled_end_time = build_scheduled_times(chosen_dt, duration)
+    used_original_plan = bool(user_planned and chosen_dt == planned_dt)
     chosen_venue, venue_note = choose_best_venue(meet, scheduled_date, scheduled_start_time, scheduled_end_time)
+
+    if campus_time_has_conflict(meet.campus, scheduled_date, scheduled_start_time, scheduled_end_time, meet=meet):
+        manual_review_notes.append("候选时段均存在同校区时间重叠，请人工复核。")
+    if not chosen_venue:
+        manual_review_notes.append("未找到满足容量或时间条件的可用场地，请人工处理。")
+    if risk_warning:
+        manual_review_notes.append(risk_warning)
 
     weather_summary = "无天气记录"
     if best_record:
-        weather_summary = f"{weather_text(best_record.weather_code)}，温度 {best_record.temperature}℃，降水 {best_record.precipitation}mm，风速 {best_record.wind_speed}m/s"
+        weather_summary = (
+            f"{weather_text(best_record.weather_code)}，温度 {best_record.temperature}℃，"
+            f"降水 {best_record.precipitation}mm，风速 {best_record.wind_speed}m/s，"
+            f"预报时间 {timezone.localtime(best_record.forecast_time):%Y-%m-%d %H:%M}"
+        )
 
-    notes = "\n".join([
-        f"活动总时长：{int(duration.total_seconds() // 60)} 分钟。",
-        f"是否使用原计划时间：{'是' if user_planned else '否'}。",
-        f"原计划时间：{meet.planned_date} {meet.planned_start_time.strftime('%H:%M') if meet.planned_start_time else '-'}-{meet.planned_end_time.strftime('%H:%M') if meet.planned_end_time else '-'}。" if meet.planned_date else "原计划时间：未指定，由系统自动排程。",
-        f"系统推荐时间：{scheduled_date} {scheduled_start_time.strftime('%H:%M')}-{scheduled_end_time.strftime('%H:%M')}。",
-        f"天气情况：{weather_summary}。",
-        f"运动适宜度评分：{best_score}（采用与智能建议一致的 calculate_sport_score 评分规则）。",
-        "时间选择原因：优先规避高风险天气，在低风险候选中选择评分最高且时间更早的时段。",
-        f"场地选择原因：{venue_note}",
-        adjustment_reason,
-        risk_warning,
-    ]).strip()
+    manual_review_text = "；".join(dict.fromkeys(note for note in manual_review_notes if note)) or "无"
+    notes = "\n".join(
+        filter(
+            None,
+            [
+                f"活动总时长：{int(duration.total_seconds() // 60)} 分钟。",
+                f"是否使用原计划时间：{'是' if used_original_plan else '否'}。",
+                f"原计划时间：{original_plan_text}。",
+                f"系统推荐时间：{scheduled_date} {scheduled_start_time.strftime('%H:%M')}-{scheduled_end_time.strftime('%H:%M')}。",
+                f"天气情况：{weather_summary}。",
+                f"运动适宜度评分：{best_score}（采用与智能建议一致的 calculate_sport_score 评分规则）。",
+                f"时间选择原因：{time_reason}",
+                f"场地选择原因：{venue_note}",
+                planned_adjustment_note,
+                f"人工复核提示：{manual_review_text}。",
+            ],
+        )
+    ).strip()
 
     FinalSchedule.objects.update_or_create(
         meet=meet,
@@ -1002,7 +1149,7 @@ def notification_list(request):
         if has_feature_perm(request.user, "can_manage_feedback"):
             teacher_q |= Q(target_role="teacher", source_module__in=["venue_feedback", "weather_feedback"])
         if has_feature_perm(request.user, "can_view_weather") or has_feature_perm(request.user, "can_generate_schedule"):
-            teacher_q |= Q(target_role="student", source_module="weather_alert")
+            teacher_q |= Q(target_role__in=["teacher", "student"], source_module__in=["weather_alert", "weather_alert_refresh"])
         if has_feature_perm(request.user, "can_generate_schedule"):
             teacher_q |= Q(target_role="student", source_module="smart_schedule")
         if has_feature_perm(request.user, "can_generate_suggestions"):
@@ -1010,7 +1157,7 @@ def notification_list(request):
         teacher_q |= Q(target_role="teacher", source_module="system")
         items = qs.filter(teacher_q)
     else:
-        allowed_student_modules = ["activity_registration", "venue_feedback", "weather_feedback", "weather_alert", "smart_schedule", "suggestion"]
+        allowed_student_modules = ["activity_registration", "venue_feedback", "weather_feedback", "weather_alert", "weather_alert_refresh", "smart_schedule", "suggestion"]
         items = qs.filter(Q(recipient=request.user) | Q(target_role="student", source_module__in=allowed_student_modules))
 
     items = items.distinct().order_by("-created_at")[:100]

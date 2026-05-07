@@ -41,6 +41,7 @@ urlpatterns = [
     path("weather/", views.weather_center, name="weather_center"),
     path("weather/refresh/", views.refresh_weather, name="refresh_weather"),
     path("alerts/", views.alert_center, name="alert_center"),
+    path("alerts/refresh/", views.refresh_weather_alerts, name="refresh_weather_alerts"),
     path("feedbacks/venue/create/", views.submit_venue_feedback, name="submit_venue_feedback"),
     path("feedbacks/venue/create/<int:venue_id>/", views.submit_venue_feedback, name="submit_venue_feedback_for_venue"),
     path("feedbacks/weather/create/", views.submit_weather_feedback, name="submit_weather_feedback"),

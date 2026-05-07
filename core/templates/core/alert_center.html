@@ -2,18 +2,33 @@
 {% block content %}
 <div class="card">
     <h3>天气预警中心</h3>
+    <div class="toolbar" style="align-items:center; gap:12px; flex-wrap:wrap;">
+        <form method="post" action="{% url 'refresh_weather_alerts' %}" style="display:inline;">
+            {% csrf_token %}
+            <button class="btn" type="submit">刷新天气预警</button>
+        </form>
+        <span class="muted">根据未来72小时天气记录自动重新生成预警。</span>
+    </div>
     <table>
-        <tr><th>校区</th><th>标题</th><th>级别</th><th>时间</th><th>内容</th></tr>
+        <tr>
+            <th>校区</th>
+            <th>预警级别</th>
+            <th>预警标题</th>
+            <th>预警内容</th>
+            <th>预警时间</th>
+            <th>是否有效</th>
+        </tr>
         {% for item in items %}
         <tr>
             <td>{{ item.campus.name }}</td>
-            <td>{{ item.title }}</td>
             <td>{{ item.get_level_display }}</td>
+            <td>{{ item.title }}</td>
+            <td style="white-space:pre-line;">{{ item.message }}</td>
             <td>{{ item.alert_time|date:"Y-m-d H:i" }}</td>
-            <td>{{ item.message }}</td>
+            <td>{% if item.active %}有效{% else %}已失效{% endif %}</td>
         </tr>
         {% empty %}
-        <tr><td colspan="5">暂无有效预警</td></tr>
+        <tr><td colspan="6">暂无预警记录，请先刷新天气中心数据后点击“刷新天气预警”。</td></tr>
         {% endfor %}
     </table>
 </div>
