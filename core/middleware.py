@@ -23,6 +23,12 @@ class OperationLogMiddleware:
         if not ip_address:
             ip_address = request.META.get("REMOTE_ADDR", "")
 
+        key_actions = {"login", "logout", "campus_create", "campus_edit", "campus_delete", "venue_create", "venue_edit", "venue_delete",
+                       "event_create", "event_edit", "event_delete", "meet_create", "meet_edit", "meet_delete", "approve_registration",
+                       "reject_registration", "refresh_weather", "generate_suggestions", "generate_schedule", "export_schedule_csv"}
+        if request.method != "POST" and action not in key_actions:
+            return response
+
         OperationLog.objects.create(
             user=user,
             role=get_user_role(user) if user else "",

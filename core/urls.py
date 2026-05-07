@@ -13,15 +13,23 @@ urlpatterns = [
 
     path("campuses/", views.campus_list, name="campus_list"),
     path("campuses/create/", views.campus_create, name="campus_create"),
+    path("campuses/<int:campus_id>/edit/", views.campus_edit, name="campus_edit"),
+    path("campuses/<int:campus_id>/delete/", views.campus_delete, name="campus_delete"),
 
     path("venues/", views.venue_list, name="venue_list"),
     path("venues/create/", views.venue_create, name="venue_create"),
+    path("venues/<int:venue_id>/edit/", views.venue_edit, name="venue_edit"),
+    path("venues/<int:venue_id>/delete/", views.venue_delete, name="venue_delete"),
 
     path("events/", views.event_list, name="event_list"),
     path("events/create/", views.event_create, name="event_create"),
+    path("events/<int:event_id>/edit/", views.event_edit, name="event_edit"),
+    path("events/<int:event_id>/delete/", views.event_delete, name="event_delete"),
 
     path("meets/", views.meet_list, name="meet_list"),
     path("meets/create/", views.meet_create, name="meet_create"),
+    path("meets/<int:meet_id>/edit/", views.meet_edit, name="meet_edit"),
+    path("meets/<int:meet_id>/delete/", views.meet_delete, name="meet_delete"),
     path("meets/<int:meet_id>/register/", views.register_meet, name="register_meet"),
     path("meets/<int:meet_id>/cancel-registration/", views.cancel_registration, name="cancel_registration"),
     path("my-registrations/", views.my_registrations, name="my_registrations"),

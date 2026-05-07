@@ -23,8 +23,14 @@
                 {% elif item.current_registration_status == 'rejected' or item.current_registration_status == 'cancelled' %}<a class="btn" href="/meets/{{ item.id }}/register/">重新报名</a>
                 {% elif item.is_full %}已满
                 {% else %}<a class="btn" href="/meets/{{ item.id }}/register/">报名</a>{% endif %}
-            {% elif item.can_manage_registrations %}
+            {% elif request.user.profile.role == 'admin' or request.user.profile.role == 'teacher' %}
+                <a class="btn" href="/meets/{{ item.id }}/edit/">编辑</a>
+                <form method="post" action="/meets/{{ item.id }}/delete/" style="display:inline;">{% csrf_token %}
+                    <button class="btn" style="background:#dc3545;" onclick="return confirm('确认删除该活动吗？')">删除</button>
+                </form>
+                {% if item.can_manage_registrations %}
                 <a class="btn" href="/meets/{{ item.id }}/registrations/">报名管理</a>
+                {% endif %}
             {% else %}-{% endif %}
             </td>
         </tr>
